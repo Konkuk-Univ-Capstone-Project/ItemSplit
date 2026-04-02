@@ -1,0 +1,22 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: itemsplit-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_NAME:-itemsplit}
+      POSTGRES_USER: ${DB_USER:-itemsplit}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-itemsplit}
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    volumes:
+      - itemsplit-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-itemsplit} -d ${DB_NAME:-itemsplit}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+volumes:
+  itemsplit-postgres-data:

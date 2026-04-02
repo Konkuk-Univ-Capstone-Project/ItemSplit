@@ -1,0 +1,11 @@
+spring:
+  config:
+    activate:
+      on-profile: local
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:itemsplit}
+    username: ${DB_USER:itemsplit}
+    password: ${DB_PASSWORD:itemsplit}
+  jpa:
+    hibernate:
+      ddl-auto: update
