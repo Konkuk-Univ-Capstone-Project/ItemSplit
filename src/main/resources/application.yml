@@ -1,0 +1,21 @@
+spring:
+  application:
+    name: itemsplit
+  profiles:
+    default: local
+  jpa:
+    open-in-view: false
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      probes:
+        enabled: true
+
+info:
+  app:
+    name: ${spring.application.name}
