@@ -9,7 +9,6 @@ import java.time.LocalDateTime;
 @Table(name = "rooms")
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-
 public class Room {
 
     @Id
@@ -25,6 +24,15 @@ public class Room {
 
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt;
+
+    private Room(String name, User owner) {
+        this.name = name;
+        this.owner = owner;
+    }
+
+    public static Room create(String name, User owner) {
+        return new Room(name, owner);
+    }
 
     @PrePersist
     protected void onCreate() {

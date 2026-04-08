@@ -9,7 +9,6 @@ import java.time.LocalDateTime;
 @Table(name = "receipts")
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-
 public class Receipt {
 
     @Id
@@ -23,8 +22,47 @@ public class Receipt {
     @Column(nullable = false)
     private String name;
 
+    @Column(nullable = false)
+    private String storedPath;
+
+    @Column(nullable = false)
+    private String originalFilename;
+
+    @Column(nullable = false)
+    private String contentType;
+
+    @Column(nullable = false)
+    private long fileSize;
+
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt;
+
+    private Receipt(
+        Room room,
+        String name,
+        String storedPath,
+        String originalFilename,
+        String contentType,
+        long fileSize
+    ) {
+        this.room = room;
+        this.name = name;
+        this.storedPath = storedPath;
+        this.originalFilename = originalFilename;
+        this.contentType = contentType;
+        this.fileSize = fileSize;
+    }
+
+    public static Receipt create(
+        Room room,
+        String name,
+        String storedPath,
+        String originalFilename,
+        String contentType,
+        long fileSize
+    ) {
+        return new Receipt(room, name, storedPath, originalFilename, contentType, fileSize);
+    }
 
     @PrePersist
     protected void onCreate() {
