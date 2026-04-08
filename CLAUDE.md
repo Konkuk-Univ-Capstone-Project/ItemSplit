@@ -70,9 +70,15 @@ Tests use **Testcontainers** — a real PostgreSQL container is started automati
 - JPA 엔티티 (User, Room, RoomMember, Receipt, Item, Assignment)
 - 공통 API 응답 래퍼 (`ApiResponse`, `ErrorResponse`)
 - 예외 처리 (`ApiException`, `ErrorCode`, `GlobalExceptionHandler`)
-- Spring Security 기본 설정 (`SecurityConfig`)
+- Spring Security + JWT 인증/인가 (`JwtTokenProvider`, `JwtAuthenticationFilter`)
+- 회원가입/로그인 API (`POST /api/auth/signup`, `POST /api/auth/login`)
+- 방 생성/조회/초대 API (`/api/rooms`)
+- 영수증 수동 입력 CRUD (`/api/rooms/{roomId}/receipts/manual`, PUT, DELETE)
+- 영수증 이미지 업로드 (`POST /api/rooms/{roomId}/receipts/image`)
+- 품목 CRUD (`/api/rooms/{roomId}/receipts/{receiptId}/items`)
+- 배정 API (`/api/rooms/{roomId}/receipts/{receiptId}/items/{itemId}/assignments`)
+- 총액 불일치 경고 (`warning` 필드, GET 영수증 단건 응답)
+- Receipt `purchasedAt` (사용자 입력 구매 날짜), `payer`, `declaredTotal` 필드
 
 **미구현:**
-- Repository, Service, REST Controller (Ping 제외)
-- JWT 인증/인가 로직
-- DTO / 입력 검증
+- 정산 계산 API (on-demand)
