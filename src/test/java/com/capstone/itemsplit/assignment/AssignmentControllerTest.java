@@ -346,14 +346,7 @@ class AssignmentControllerTest {
 	void replaceAssigneesFailsWhenItemDoesNotBelongToReceipt() throws Exception {
 		User owner = createUser("owner@example.com", "owner");
 		ItemFixture fixture = createItemFixture("Capstone Team", "Dinner", "Pasta", owner);
-		Receipt otherReceipt = receiptRepository.save(Receipt.create(
-			fixture.room(),
-			"Late Night",
-			"receipts/" + fixture.room().getId() + "/late-night.png",
-			"late-night.png",
-			"image/png",
-			256L
-		));
+		Receipt otherReceipt = receiptRepository.save(Receipt.createManual(fixture.room(), "Late Night"));
 		Item otherItem = itemRepository.save(Item.create(otherReceipt, "Pizza", 22000, 1));
 
 		mockMvc
@@ -428,20 +421,9 @@ class AssignmentControllerTest {
 		Arrays.stream(additionalMembers)
 			.forEach(member -> roomMemberRepository.save(RoomMember.create(room, member)));
 
-		Receipt receipt = receiptRepository.save(Receipt.create(
-			room,
-			receiptName,
-			"receipts/" + room.getId() + "/" + normalizeForPath(receiptName) + ".png",
-			normalizeForPath(receiptName) + ".png",
-			"image/png",
-			128L
-		));
+		Receipt receipt = receiptRepository.save(Receipt.createManual(room, receiptName));
 		Item item = itemRepository.save(Item.create(receipt, itemName, 15000, 1));
 		return new ItemFixture(room, receipt, item);
-	}
-
-	private String normalizeForPath(String value) {
-		return value.toLowerCase().replace(" ", "-");
 	}
 
 	private User createUser(String email, String nickname) {

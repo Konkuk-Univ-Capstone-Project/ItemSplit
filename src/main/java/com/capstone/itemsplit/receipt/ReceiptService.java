@@ -2,13 +2,17 @@ package com.capstone.itemsplit.receipt;
 
 import com.capstone.itemsplit.common.exception.ApiException;
 import com.capstone.itemsplit.common.exception.ErrorCode;
+import com.capstone.itemsplit.domain.item.Item;
+import com.capstone.itemsplit.domain.item.ItemRepository;
 import com.capstone.itemsplit.domain.receipt.Receipt;
 import com.capstone.itemsplit.domain.receipt.ReceiptRepository;
+import com.capstone.itemsplit.domain.receipt.ReceiptSourceType;
 import com.capstone.itemsplit.domain.room.Room;
 import com.capstone.itemsplit.room.RoomAuthorizationService;
 import com.capstone.itemsplit.storage.StorageService;
 import java.io.IOException;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.Locale;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -22,6 +26,7 @@ import org.springframework.web.multipart.MultipartFile;
 public class ReceiptService {
 
 	private final ReceiptRepository receiptRepository;
+	private final ItemRepository itemRepository;
 	private final RoomAuthorizationService roomAuthorizationService;
 	private final StorageService storageService;
 
@@ -40,7 +45,7 @@ public class ReceiptService {
 			StorageService.StoredFile storedFile = storageService.store("receipts/" + roomId, file);
 			String receiptName = resolveReceiptName(name, storedFile.originalFilename());
 
-			Receipt receipt = receiptRepository.save(Receipt.create(
+			Receipt receipt = receiptRepository.save(Receipt.createImageUpload(
 				room,
 				receiptName,
 				storedFile.storedPath(),
@@ -53,6 +58,30 @@ public class ReceiptService {
 		} catch (IOException exception) {
 			throw new ApiException(ErrorCode.INTERNAL_ERROR, "Failed to store the receipt image.");
 		}
+	}
+
+	@Transactional
+	public CreateManualReceiptResult createManualReceipt(
+		Long roomId,
+		Long userId,
+		String name,
+		List<ManualReceiptItemCommand> items
+	) {
+		Room room = roomAuthorizationService.checkMember(roomId, userId);
+
+		Receipt receipt = receiptRepository.save(Receipt.createManual(room, name.trim()));
+		List<Item> savedItems = itemRepository.saveAll(
+			items.stream()
+				.map(item -> Item.create(
+					receipt,
+					item.name().trim(),
+					item.price(),
+					item.quantity()
+				))
+				.toList()
+		);
+
+		return CreateManualReceiptResult.from(receipt, savedItems);
 	}
 
 	private void validateImageFile(MultipartFile file) {
@@ -84,10 +113,11 @@ public class ReceiptService {
 		Long receiptId,
 		Long roomId,
 		String name,
+		ReceiptSourceType sourceType,
 		String storedPath,
 		String originalFilename,
 		String contentType,
-		long fileSize
+		Long fileSize
 	) {
 
 		private static UploadReceiptImageResult from(Receipt receipt) {
@@ -95,6 +125,7 @@ public class ReceiptService {
 				receipt.getId(),
 				receipt.getRoom().getId(),
 				receipt.getName(),
+				receipt.getSourceType(),
 				receipt.getStoredPath(),
 				receipt.getOriginalFilename(),
 				receipt.getContentType(),
@@ -102,6 +133,39 @@ public class ReceiptService {
 			);
 		}
 
+	}
+
+	public record CreateManualReceiptResult(
+		Long receiptId,
+		Long roomId,
+		String name,
+		ReceiptSourceType sourceType,
+		List<ManualReceiptItemResult> items
+	) {
+
+		private static CreateManualReceiptResult from(Receipt receipt, List<Item> items) {
+			return new CreateManualReceiptResult(
+				receipt.getId(),
+				receipt.getRoom().getId(),
+				receipt.getName(),
+				receipt.getSourceType(),
+				items.stream()
+					.map(item -> new ManualReceiptItemResult(
+						item.getId(),
+						item.getName(),
+						item.getPrice(),
+						item.getQuantity()
+					))
+					.toList()
+			);
+		}
+
+	}
+
+	public record ManualReceiptItemCommand(String name, int price, int quantity) {
+	}
+
+	public record ManualReceiptItemResult(Long itemId, String name, int price, int quantity) {
 	}
 
 }
