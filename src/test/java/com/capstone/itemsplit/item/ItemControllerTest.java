@@ -80,7 +80,7 @@ class ItemControllerTest {
 		User owner = createUser("owner@example.com", "owner");
 		Room room = roomRepository.save(Room.create("Capstone Team", owner));
 		roomMemberRepository.save(RoomMember.create(room, owner));
-		Receipt receipt = receiptRepository.save(Receipt.createManual(room, "카페", null, null));
+		Receipt receipt = receiptRepository.save(Receipt.createManual(room, "카페", null, null, null));
 
 		mockMvc
 			.perform(
@@ -107,7 +107,7 @@ class ItemControllerTest {
 		User owner = createUser("owner@example.com", "owner");
 		Room room = roomRepository.save(Room.create("Capstone Team", owner));
 		roomMemberRepository.save(RoomMember.create(room, owner));
-		Receipt receipt = receiptRepository.save(Receipt.createManual(room, "카페", null, null));
+		Receipt receipt = receiptRepository.save(Receipt.createManual(room, "카페", null, null, null));
 		Item item = itemRepository.save(Item.create(receipt, "아메리카노", 4500, 1));
 
 		mockMvc
@@ -136,7 +136,7 @@ class ItemControllerTest {
 		User owner = createUser("owner@example.com", "owner");
 		Room room = roomRepository.save(Room.create("Capstone Team", owner));
 		roomMemberRepository.save(RoomMember.create(room, owner));
-		Receipt receipt = receiptRepository.save(Receipt.createManual(room, "카페", null, null));
+		Receipt receipt = receiptRepository.save(Receipt.createManual(room, "카페", null, null, null));
 		Item item = itemRepository.save(Item.create(receipt, "아메리카노", 4500, 1));
 		assignmentRepository.save(Assignment.create(item, owner));
 

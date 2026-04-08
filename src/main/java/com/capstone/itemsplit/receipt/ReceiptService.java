@@ -2,7 +2,6 @@ package com.capstone.itemsplit.receipt;
 
 import com.capstone.itemsplit.common.exception.ApiException;
 import com.capstone.itemsplit.common.exception.ErrorCode;
-import com.capstone.itemsplit.domain.assignment.Assignment;
 import com.capstone.itemsplit.domain.assignment.AssignmentRepository;
 import com.capstone.itemsplit.domain.item.Item;
 import com.capstone.itemsplit.domain.item.ItemRepository;
@@ -17,6 +16,7 @@ import com.capstone.itemsplit.room.RoomAuthorizationService;
 import com.capstone.itemsplit.storage.StorageService;
 import java.io.IOException;
 import java.nio.file.Path;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Locale;
@@ -76,12 +76,13 @@ public class ReceiptService {
 		String name,
 		Long payerId,
 		Integer declaredTotal,
+		LocalDate purchasedAt,
 		List<ManualReceiptItemCommand> items
 	) {
 		Room room = roomAuthorizationService.checkMember(roomId, userId);
 		User payer = resolvePayer(roomId, payerId);
 
-		Receipt receipt = receiptRepository.save(Receipt.createManual(room, name.trim(), payer, declaredTotal));
+		Receipt receipt = receiptRepository.save(Receipt.createManual(room, name.trim(), payer, declaredTotal, purchasedAt));
 		List<Item> savedItems = itemRepository.saveAll(
 			items.stream()
 				.map(item -> Item.create(
@@ -117,12 +118,13 @@ public class ReceiptService {
 		Long userId,
 		String name,
 		Long payerId,
-		Integer declaredTotal
+		Integer declaredTotal,
+		LocalDate purchasedAt
 	) {
 		roomAuthorizationService.checkMember(roomId, userId);
 		Receipt receipt = findReceiptInRoom(roomId, receiptId);
 		User payer = resolvePayer(roomId, payerId);
-		receipt.update(name.trim(), payer, declaredTotal);
+		receipt.update(name.trim(), payer, declaredTotal, purchasedAt);
 		List<Item> items = itemRepository.findAllByReceiptId(receiptId);
 		return ReceiptDetailResult.from(receipt, items);
 	}
@@ -130,17 +132,14 @@ public class ReceiptService {
 	@Transactional
 	public void deleteReceipt(Long roomId, Long receiptId, Long userId) {
 		roomAuthorizationService.checkMember(roomId, userId);
-		Receipt receipt = findReceiptInRoom(roomId, receiptId);
-		List<Item> items = itemRepository.findAllByReceiptId(receiptId);
-		if (!items.isEmpty()) {
-			List<Long> itemIds = items.stream().map(Item::getId).toList();
-			List<Assignment> assignments = assignmentRepository.findAllByItemIdIn(itemIds);
-			if (!assignments.isEmpty()) {
-				assignmentRepository.deleteAllInBatch(assignments);
-			}
-			itemRepository.deleteAllInBatch(items);
+		findReceiptInRoom(roomId, receiptId);
+		List<Long> itemIds = itemRepository.findAllByReceiptId(receiptId)
+			.stream().map(Item::getId).toList();
+		if (!itemIds.isEmpty()) {
+			assignmentRepository.deleteAllByItemIdIn(itemIds);
 		}
-		receiptRepository.delete(receipt);
+		itemRepository.deleteAllByReceiptId(receiptId);
+		receiptRepository.deleteById(receiptId);
 	}
 
 	private Receipt findReceiptInRoom(Long roomId, Long receiptId) {
@@ -196,6 +195,7 @@ public class ReceiptService {
 		Long payerId,
 		String payerNickname,
 		Integer declaredTotal,
+		LocalDate purchasedAt,
 		LocalDateTime createdAt
 	) {
 
@@ -208,6 +208,7 @@ public class ReceiptService {
 				receipt.getPayer() != null ? receipt.getPayer().getId() : null,
 				receipt.getPayer() != null ? receipt.getPayer().getNickname() : null,
 				receipt.getDeclaredTotal(),
+				receipt.getPurchasedAt(),
 				receipt.getCreatedAt()
 			);
 		}
@@ -222,6 +223,7 @@ public class ReceiptService {
 		Long payerId,
 		String payerNickname,
 		Integer declaredTotal,
+		LocalDate purchasedAt,
 		LocalDateTime createdAt,
 		List<ReceiptItemResult> items,
 		String warning
@@ -241,6 +243,7 @@ public class ReceiptService {
 				receipt.getPayer() != null ? receipt.getPayer().getId() : null,
 				receipt.getPayer() != null ? receipt.getPayer().getNickname() : null,
 				receipt.getDeclaredTotal(),
+				receipt.getPurchasedAt(),
 				receipt.getCreatedAt(),
 				items.stream()
 					.map(item -> new ReceiptItemResult(
@@ -293,6 +296,7 @@ public class ReceiptService {
 		Long payerId,
 		String payerNickname,
 		Integer declaredTotal,
+		LocalDate purchasedAt,
 		List<ManualReceiptItemResult> items
 	) {
 
@@ -305,6 +309,7 @@ public class ReceiptService {
 				receipt.getPayer() != null ? receipt.getPayer().getId() : null,
 				receipt.getPayer() != null ? receipt.getPayer().getNickname() : null,
 				receipt.getDeclaredTotal(),
+				receipt.getPurchasedAt(),
 				items.stream()
 					.map(item -> new ManualReceiptItemResult(
 						item.getId(),

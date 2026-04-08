@@ -346,7 +346,7 @@ class AssignmentControllerTest {
 	void replaceAssigneesFailsWhenItemDoesNotBelongToReceipt() throws Exception {
 		User owner = createUser("owner@example.com", "owner");
 		ItemFixture fixture = createItemFixture("Capstone Team", "Dinner", "Pasta", owner);
-		Receipt otherReceipt = receiptRepository.save(Receipt.createManual(fixture.room(), "Late Night", null, null));
+		Receipt otherReceipt = receiptRepository.save(Receipt.createManual(fixture.room(), "Late Night", null, null, null));
 		Item otherItem = itemRepository.save(Item.create(otherReceipt, "Pizza", 22000, 1));
 
 		mockMvc
@@ -421,7 +421,7 @@ class AssignmentControllerTest {
 		Arrays.stream(additionalMembers)
 			.forEach(member -> roomMemberRepository.save(RoomMember.create(room, member)));
 
-		Receipt receipt = receiptRepository.save(Receipt.createManual(room, receiptName, null, null));
+		Receipt receipt = receiptRepository.save(Receipt.createManual(room, receiptName, null, null, null));
 		Item item = itemRepository.save(Item.create(receipt, itemName, 15000, 1));
 		return new ItemFixture(room, receipt, item);
 	}

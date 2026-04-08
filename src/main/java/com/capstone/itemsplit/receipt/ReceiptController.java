@@ -11,6 +11,7 @@ import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
@@ -54,6 +55,7 @@ public class ReceiptController {
 					r.payerId(),
 					r.payerNickname(),
 					r.declaredTotal(),
+					r.purchasedAt(),
 					r.createdAt()
 				))
 				.toList()
@@ -107,6 +109,7 @@ public class ReceiptController {
 			request.name(),
 			request.payerId(),
 			request.declaredTotal(),
+			request.purchasedAt(),
 			request.items().stream()
 				.map(item -> new ReceiptService.ManualReceiptItemCommand(
 					item.name(),
@@ -125,6 +128,7 @@ public class ReceiptController {
 				result.payerId(),
 				result.payerNickname(),
 				result.declaredTotal(),
+				result.purchasedAt(),
 				result.items().stream()
 					.map(item -> new ManualReceiptItemResponse(
 						item.itemId(),
@@ -150,7 +154,8 @@ public class ReceiptController {
 			userId,
 			request.name(),
 			request.payerId(),
-			request.declaredTotal()
+			request.declaredTotal(),
+			request.purchasedAt()
 		);
 		return ApiResponse.success(toDetailResponse(result));
 	}
@@ -175,6 +180,7 @@ public class ReceiptController {
 			result.payerId(),
 			result.payerNickname(),
 			result.declaredTotal(),
+			result.purchasedAt(),
 			result.createdAt(),
 			result.items().stream()
 				.map(item -> new ReceiptItemResponse(
@@ -204,6 +210,7 @@ public class ReceiptController {
 		Long payerId,
 		String payerNickname,
 		Integer declaredTotal,
+		LocalDate purchasedAt,
 		LocalDateTime createdAt
 	) {
 	}
@@ -216,6 +223,7 @@ public class ReceiptController {
 		Long payerId,
 		String payerNickname,
 		Integer declaredTotal,
+		LocalDate purchasedAt,
 		LocalDateTime createdAt,
 		List<ReceiptItemResponse> items,
 		String warning
@@ -248,6 +256,7 @@ public class ReceiptController {
 		String name,
 		Long payerId,
 		Integer declaredTotal,
+		LocalDate purchasedAt,
 		@NotEmpty(message = "items must not be empty")
 		List<@Valid ManualReceiptItemRequest> items
 	) {
@@ -274,6 +283,7 @@ public class ReceiptController {
 		Long payerId,
 		String payerNickname,
 		Integer declaredTotal,
+		LocalDate purchasedAt,
 		List<ManualReceiptItemResponse> items
 	) {
 	}
@@ -291,7 +301,8 @@ public class ReceiptController {
 		@Size(max = 100, message = "name must be 100 characters or fewer")
 		String name,
 		Long payerId,
-		Integer declaredTotal
+		Integer declaredTotal,
+		LocalDate purchasedAt
 	) {
 	}
 

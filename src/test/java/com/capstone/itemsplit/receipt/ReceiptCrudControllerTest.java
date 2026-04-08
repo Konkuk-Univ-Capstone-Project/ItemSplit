@@ -81,8 +81,8 @@ class ReceiptCrudControllerTest {
 		User owner = createUser("owner@example.com", "owner");
 		Room room = roomRepository.save(Room.create("Capstone Team", owner));
 		roomMemberRepository.save(RoomMember.create(room, owner));
-		receiptRepository.save(Receipt.createManual(room, "카페", null, null));
-		receiptRepository.save(Receipt.createManual(room, "저녁 식사", null, null));
+		receiptRepository.save(Receipt.createManual(room, "카페", null, null, null));
+		receiptRepository.save(Receipt.createManual(room, "저녁 식사", null, null, null));
 
 		mockMvc
 			.perform(
@@ -100,7 +100,7 @@ class ReceiptCrudControllerTest {
 		User owner = createUser("owner@example.com", "owner");
 		Room room = roomRepository.save(Room.create("Capstone Team", owner));
 		roomMemberRepository.save(RoomMember.create(room, owner));
-		Receipt receipt = receiptRepository.save(Receipt.createManual(room, "카페", null, null));
+		Receipt receipt = receiptRepository.save(Receipt.createManual(room, "카페", null, null, null));
 		itemRepository.save(Item.create(receipt, "아메리카노", 4500, 2));
 
 		mockMvc
@@ -122,7 +122,7 @@ class ReceiptCrudControllerTest {
 		User owner = createUser("owner@example.com", "owner");
 		Room room = roomRepository.save(Room.create("Capstone Team", owner));
 		roomMemberRepository.save(RoomMember.create(room, owner));
-		Receipt receipt = receiptRepository.save(Receipt.createManual(room, "카페", null, 99999));
+		Receipt receipt = receiptRepository.save(Receipt.createManual(room, "카페", null, 99999, null));
 		itemRepository.save(Item.create(receipt, "아메리카노", 4500, 2));
 
 		mockMvc
@@ -140,7 +140,7 @@ class ReceiptCrudControllerTest {
 		User owner = createUser("owner@example.com", "owner");
 		Room room = roomRepository.save(Room.create("Capstone Team", owner));
 		roomMemberRepository.save(RoomMember.create(room, owner));
-		Receipt receipt = receiptRepository.save(Receipt.createManual(room, "카페", null, null));
+		Receipt receipt = receiptRepository.save(Receipt.createManual(room, "카페", null, null, null));
 
 		mockMvc
 			.perform(
@@ -167,7 +167,7 @@ class ReceiptCrudControllerTest {
 		User owner = createUser("owner@example.com", "owner");
 		Room room = roomRepository.save(Room.create("Capstone Team", owner));
 		roomMemberRepository.save(RoomMember.create(room, owner));
-		Receipt receipt = receiptRepository.save(Receipt.createManual(room, "카페", null, null));
+		Receipt receipt = receiptRepository.save(Receipt.createManual(room, "카페", null, null, null));
 		Item item = itemRepository.save(Item.create(receipt, "아메리카노", 4500, 1));
 		assignmentRepository.save(Assignment.create(item, owner));
 
@@ -219,7 +219,7 @@ class ReceiptCrudControllerTest {
 		User stranger = createUser("stranger@example.com", "stranger");
 		Room room = roomRepository.save(Room.create("Capstone Team", owner));
 		roomMemberRepository.save(RoomMember.create(room, owner));
-		Receipt receipt = receiptRepository.save(Receipt.createManual(room, "카페", null, null));
+		Receipt receipt = receiptRepository.save(Receipt.createManual(room, "카페", null, null, null));
 
 		mockMvc
 			.perform(

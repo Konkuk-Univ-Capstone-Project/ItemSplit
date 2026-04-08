@@ -2,7 +2,6 @@ package com.capstone.itemsplit.item;
 
 import com.capstone.itemsplit.common.exception.ApiException;
 import com.capstone.itemsplit.common.exception.ErrorCode;
-import com.capstone.itemsplit.domain.assignment.Assignment;
 import com.capstone.itemsplit.domain.assignment.AssignmentRepository;
 import com.capstone.itemsplit.domain.item.Item;
 import com.capstone.itemsplit.domain.item.ItemRepository;
@@ -58,12 +57,9 @@ public class ItemService {
 	@Transactional
 	public void deleteItem(Long roomId, Long receiptId, Long itemId, Long userId) {
 		roomAuthorizationService.checkMember(roomId, userId);
-		Item item = findItemInReceipt(roomId, receiptId, itemId);
-		List<Assignment> assignments = assignmentRepository.findAllByItemId(itemId);
-		if (!assignments.isEmpty()) {
-			assignmentRepository.deleteAllInBatch(assignments);
-		}
-		itemRepository.delete(item);
+		findItemInReceipt(roomId, receiptId, itemId);
+		assignmentRepository.deleteAllByItemIdIn(List.of(itemId));
+		itemRepository.deleteById(itemId);
 	}
 
 	private Receipt findReceiptInRoom(Long roomId, Long receiptId) {
