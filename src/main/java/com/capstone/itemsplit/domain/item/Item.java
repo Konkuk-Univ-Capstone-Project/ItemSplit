@@ -37,4 +37,10 @@ public class Item {
     public static Item create(Receipt receipt, String name, int price, int quantity) {
         return new Item(receipt, name, price, quantity);
     }
+
+    public void update(String name, int price, int quantity) {
+        this.name = name;
+        this.price = price;
+        this.quantity = quantity;
+    }
 }
