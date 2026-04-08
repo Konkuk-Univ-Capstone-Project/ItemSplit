@@ -19,6 +19,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.context.ActiveProfiles;
@@ -27,6 +28,7 @@ import org.springframework.util.FileSystemUtils;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -101,6 +103,7 @@ class ReceiptControllerTest {
 			.andExpect(jsonPath("$.success").value(true))
 			.andExpect(jsonPath("$.data.roomId").value(room.getId()))
 			.andExpect(jsonPath("$.data.name").value("Dinner Receipt"))
+			.andExpect(jsonPath("$.data.sourceType").value("IMAGE_UPLOAD"))
 			.andExpect(jsonPath("$.data.originalFilename").value("receipt-sample.png"))
 			.andExpect(jsonPath("$.data.storedPath").value(org.hamcrest.Matchers.startsWith("receipts/" + room.getId() + "/")));
 
@@ -162,6 +165,96 @@ class ReceiptControllerTest {
 			.andExpect(jsonPath("$.error.message").value("Only image files can be uploaded."));
 
 		assertThat(receiptRepository.count()).isZero();
+	}
+
+	@Test
+	@DisplayName("POST /api/rooms/{roomId}/receipts/manual creates a manual receipt and its items for a room member")
+	void createManualReceiptStoresTextItems() throws Exception {
+		User owner = createUser("owner@example.com", "owner");
+		Room room = roomRepository.save(Room.create("Capstone Team", owner));
+		roomMemberRepository.save(RoomMember.create(room, owner));
+
+		mockMvc
+			.perform(
+				post("/api/rooms/{roomId}/receipts/manual", room.getId())
+					.header(HttpHeaders.AUTHORIZATION, bearer(owner))
+					.contentType(MediaType.APPLICATION_JSON)
+					.content("""
+						{
+						  "name": "Dinner Manual Entry",
+						  "items": [
+						    { "name": "Pasta", "price": 15000, "quantity": 1 },
+						    { "name": "Pizza", "price": 22000, "quantity": 2 }
+						  ]
+						}
+						""")
+			)
+			.andExpect(status().isCreated())
+			.andExpect(jsonPath("$.success").value(true))
+			.andExpect(jsonPath("$.data.roomId").value(room.getId()))
+			.andExpect(jsonPath("$.data.name").value("Dinner Manual Entry"))
+			.andExpect(jsonPath("$.data.sourceType").value("MANUAL"))
+			.andExpect(jsonPath("$.data.items.length()").value(2))
+			.andExpect(jsonPath("$.data.items[0].name").value("Pasta"))
+			.andExpect(jsonPath("$.data.items[1].name").value("Pizza"));
+
+		assertThat(receiptRepository.count()).isEqualTo(1);
+		assertThat(itemRepository.count()).isEqualTo(2);
+		assertThat(receiptRepository.findAll().get(0).getStoredPath()).isNull();
+		assertThat(receiptRepository.findAll().get(0).getSourceType().name()).isEqualTo("MANUAL");
+	}
+
+	@Test
+	@DisplayName("POST /api/rooms/{roomId}/receipts/manual returns forbidden for non-members")
+	void createManualReceiptRequiresRoomMembership() throws Exception {
+		User owner = createUser("owner@example.com", "owner");
+		User stranger = createUser("stranger@example.com", "stranger");
+		Room room = roomRepository.save(Room.create("Capstone Team", owner));
+		roomMemberRepository.save(RoomMember.create(room, owner));
+
+		mockMvc
+			.perform(
+				post("/api/rooms/{roomId}/receipts/manual", room.getId())
+					.header(HttpHeaders.AUTHORIZATION, bearer(stranger))
+					.contentType(MediaType.APPLICATION_JSON)
+					.content("""
+						{
+						  "name": "Dinner Manual Entry",
+						  "items": [
+						    { "name": "Pasta", "price": 15000, "quantity": 1 }
+						  ]
+						}
+						""")
+			)
+			.andExpect(status().isForbidden())
+			.andExpect(jsonPath("$.success").value(false))
+			.andExpect(jsonPath("$.error.code").value("FORBIDDEN"))
+			.andExpect(jsonPath("$.error.message").value("You are not a member of this room."));
+	}
+
+	@Test
+	@DisplayName("POST /api/rooms/{roomId}/receipts/manual validates empty item input")
+	void createManualReceiptValidatesItems() throws Exception {
+		User owner = createUser("owner@example.com", "owner");
+		Room room = roomRepository.save(Room.create("Capstone Team", owner));
+		roomMemberRepository.save(RoomMember.create(room, owner));
+
+		mockMvc
+			.perform(
+				post("/api/rooms/{roomId}/receipts/manual", room.getId())
+					.header(HttpHeaders.AUTHORIZATION, bearer(owner))
+					.contentType(MediaType.APPLICATION_JSON)
+					.content("""
+						{
+						  "name": "Dinner Manual Entry",
+						  "items": []
+						}
+						""")
+			)
+			.andExpect(status().isBadRequest())
+			.andExpect(jsonPath("$.success").value(false))
+			.andExpect(jsonPath("$.error.code").value("VALIDATION_ERROR"))
+			.andExpect(jsonPath("$.error.details[0].field").value("items"));
 	}
 
 	private User createUser(String email, String nickname) {

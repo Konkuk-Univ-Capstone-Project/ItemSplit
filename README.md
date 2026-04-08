@@ -139,3 +139,45 @@ Content-Type: application/json
 - 정산 계산 시 item별 assignee 목록은 `GET /api/rooms/{roomId}/receipts/{receiptId}/items/{itemId}/assignees`로 조회할 수 있습니다.
 - 서버는 `receipt -> room`, `item -> receipt`, `assignee user -> room member` 관계를 모두 검증하므로, 성공 응답에 포함된 assignee는 항상 해당 room 멤버라는 전제를 두고 정산 엔진에서 사용할 수 있습니다.
 - 빈 assignee 목록은 아직 아무도 지정되지 않았거나, 전체 해제된 상태로 해석하면 됩니다.
+
+## Receipt API
+
+`Receipt`는 이제 이미지 업로드 전용 엔티티가 아니라, room 안의 영수증/지출 묶음을 표현하는 공통 루트입니다.
+
+### 1. 이미지 영수증 업로드
+
+```http
+POST /api/rooms/{roomId}/receipts/image
+Authorization: Bearer {accessToken}
+Content-Type: multipart/form-data
+```
+
+- `sourceType`은 `IMAGE_UPLOAD`
+- 파일 메타데이터(`storedPath`, `originalFilename`, `contentType`, `fileSize`)가 함께 저장됩니다.
+
+### 2. 수동 입력 영수증 생성
+
+```http
+POST /api/rooms/{roomId}/receipts/manual
+Authorization: Bearer {accessToken}
+Content-Type: application/json
+
+{
+  "name": "Dinner Manual Entry",
+  "items": [
+    { "name": "Pasta", "price": 15000, "quantity": 1 },
+    { "name": "Pizza", "price": 22000, "quantity": 2 }
+  ]
+}
+```
+
+- `sourceType`은 `MANUAL`
+- 수동 입력 영수증은 첨부 파일이 없으므로 파일 메타데이터는 비어 있습니다.
+- item 목록은 receipt 생성과 함께 저장됩니다.
+
+### 3. sourceType 정책
+
+- `IMAGE_UPLOAD`: 이미지 파일을 올려 만든 receipt
+- `MANUAL`: 텍스트로 receipt와 item 목록을 직접 입력해 만든 receipt
+
+정산, assignment, room 권한 로직은 두 타입 모두 동일한 `Receipt -> Item -> Room` 구조를 기준으로 동작합니다.
