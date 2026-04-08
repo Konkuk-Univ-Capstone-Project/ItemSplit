@@ -1,6 +1,8 @@
 package com.capstone.itemsplit.receipt;
 
 import com.capstone.itemsplit.auth.JwtTokenProvider;
+import com.capstone.itemsplit.domain.assignment.AssignmentRepository;
+import com.capstone.itemsplit.domain.item.ItemRepository;
 import com.capstone.itemsplit.domain.receipt.ReceiptRepository;
 import com.capstone.itemsplit.domain.room.Room;
 import com.capstone.itemsplit.domain.room.RoomRepository;
@@ -54,10 +56,18 @@ class ReceiptControllerTest {
 	private RoomMemberRepository roomMemberRepository;
 
 	@Autowired
+	private AssignmentRepository assignmentRepository;
+
+	@Autowired
+	private ItemRepository itemRepository;
+
+	@Autowired
 	private ReceiptRepository receiptRepository;
 
 	@BeforeEach
 	void setUp() throws Exception {
+		assignmentRepository.deleteAll();
+		itemRepository.deleteAll();
 		receiptRepository.deleteAll();
 		roomMemberRepository.deleteAll();
 		roomRepository.deleteAll();
