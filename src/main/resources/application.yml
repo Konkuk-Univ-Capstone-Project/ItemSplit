@@ -19,3 +19,11 @@ management:
 info:
   app:
     name: ${spring.application.name}
+
+app:
+  jwt:
+    secret: ${JWT_SECRET:change-me-to-a-long-random-secret-for-itemsplit}
+    access-token-expiration: ${JWT_ACCESS_TOKEN_EXPIRATION:86400000}
+  storage:
+    local:
+      root-path: ${LOCAL_STORAGE_ROOT:./storage}

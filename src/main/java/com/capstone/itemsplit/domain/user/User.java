@@ -8,7 +8,6 @@ import java.time.LocalDateTime;
 @Table(name = "users")
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-
 public class User {
 
     @Id
@@ -26,6 +25,16 @@ public class User {
 
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt;
+
+    private User(String email, String password, String nickname) {
+        this.email = email;
+        this.password = password;
+        this.nickname = nickname;
+    }
+
+    public static User create(String email, String password, String nickname) {
+        return new User(email, password, nickname);
+    }
 
     @PrePersist
     protected void onCreate() {

@@ -38,7 +38,8 @@ out/
 
 # Local environment files
 .env
-report/
+/report/
+/storage/
 
 # OS-generated files
 .DS_Store
