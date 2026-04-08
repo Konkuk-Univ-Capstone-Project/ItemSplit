@@ -1,6 +1,7 @@
 package com.capstone.itemsplit.domain.receipt;
 
 import com.capstone.itemsplit.domain.room.Room;
+import com.capstone.itemsplit.domain.user.User;
 import java.time.LocalDateTime;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -47,6 +48,12 @@ public class Receipt {
 
     private Long fileSize;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "payer_id")
+    private User payer;
+
+    private Integer declaredTotal;
+
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
@@ -87,16 +94,17 @@ public class Receipt {
         );
     }
 
-    public static Receipt createManual(Room room, String name) {
-        return new Receipt(
-            room,
-            name,
-            ReceiptSourceType.MANUAL,
-            null,
-            null,
-            null,
-            null
-        );
+    public static Receipt createManual(Room room, String name, User payer, Integer declaredTotal) {
+        Receipt receipt = new Receipt(room, name, ReceiptSourceType.MANUAL, null, null, null, null);
+        receipt.payer = payer;
+        receipt.declaredTotal = declaredTotal;
+        return receipt;
+    }
+
+    public void update(String name, User payer, Integer declaredTotal) {
+        this.name = name;
+        this.payer = payer;
+        this.declaredTotal = declaredTotal;
     }
 
     @PrePersist

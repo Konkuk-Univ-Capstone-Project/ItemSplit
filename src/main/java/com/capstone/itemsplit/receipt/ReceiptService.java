@@ -2,16 +2,22 @@ package com.capstone.itemsplit.receipt;
 
 import com.capstone.itemsplit.common.exception.ApiException;
 import com.capstone.itemsplit.common.exception.ErrorCode;
+import com.capstone.itemsplit.domain.assignment.Assignment;
+import com.capstone.itemsplit.domain.assignment.AssignmentRepository;
 import com.capstone.itemsplit.domain.item.Item;
 import com.capstone.itemsplit.domain.item.ItemRepository;
 import com.capstone.itemsplit.domain.receipt.Receipt;
 import com.capstone.itemsplit.domain.receipt.ReceiptRepository;
 import com.capstone.itemsplit.domain.receipt.ReceiptSourceType;
 import com.capstone.itemsplit.domain.room.Room;
+import com.capstone.itemsplit.domain.roommember.RoomMemberRepository;
+import com.capstone.itemsplit.domain.user.User;
+import com.capstone.itemsplit.domain.user.UserRepository;
 import com.capstone.itemsplit.room.RoomAuthorizationService;
 import com.capstone.itemsplit.storage.StorageService;
 import java.io.IOException;
 import java.nio.file.Path;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Locale;
 import lombok.RequiredArgsConstructor;
@@ -27,6 +33,9 @@ public class ReceiptService {
 
 	private final ReceiptRepository receiptRepository;
 	private final ItemRepository itemRepository;
+	private final AssignmentRepository assignmentRepository;
+	private final UserRepository userRepository;
+	private final RoomMemberRepository roomMemberRepository;
 	private final RoomAuthorizationService roomAuthorizationService;
 	private final StorageService storageService;
 
@@ -65,11 +74,14 @@ public class ReceiptService {
 		Long roomId,
 		Long userId,
 		String name,
+		Long payerId,
+		Integer declaredTotal,
 		List<ManualReceiptItemCommand> items
 	) {
 		Room room = roomAuthorizationService.checkMember(roomId, userId);
+		User payer = resolvePayer(roomId, payerId);
 
-		Receipt receipt = receiptRepository.save(Receipt.createManual(room, name.trim()));
+		Receipt receipt = receiptRepository.save(Receipt.createManual(room, name.trim(), payer, declaredTotal));
 		List<Item> savedItems = itemRepository.saveAll(
 			items.stream()
 				.map(item -> Item.create(
@@ -82,6 +94,73 @@ public class ReceiptService {
 		);
 
 		return CreateManualReceiptResult.from(receipt, savedItems);
+	}
+
+	public List<ReceiptSummaryResult> getReceipts(Long roomId, Long userId) {
+		roomAuthorizationService.checkMember(roomId, userId);
+		return receiptRepository.findAllByRoomId(roomId).stream()
+			.map(ReceiptSummaryResult::from)
+			.toList();
+	}
+
+	public ReceiptDetailResult getReceipt(Long roomId, Long receiptId, Long userId) {
+		roomAuthorizationService.checkMember(roomId, userId);
+		Receipt receipt = findReceiptInRoom(roomId, receiptId);
+		List<Item> items = itemRepository.findAllByReceiptId(receiptId);
+		return ReceiptDetailResult.from(receipt, items);
+	}
+
+	@Transactional
+	public ReceiptDetailResult updateReceipt(
+		Long roomId,
+		Long receiptId,
+		Long userId,
+		String name,
+		Long payerId,
+		Integer declaredTotal
+	) {
+		roomAuthorizationService.checkMember(roomId, userId);
+		Receipt receipt = findReceiptInRoom(roomId, receiptId);
+		User payer = resolvePayer(roomId, payerId);
+		receipt.update(name.trim(), payer, declaredTotal);
+		List<Item> items = itemRepository.findAllByReceiptId(receiptId);
+		return ReceiptDetailResult.from(receipt, items);
+	}
+
+	@Transactional
+	public void deleteReceipt(Long roomId, Long receiptId, Long userId) {
+		roomAuthorizationService.checkMember(roomId, userId);
+		Receipt receipt = findReceiptInRoom(roomId, receiptId);
+		List<Item> items = itemRepository.findAllByReceiptId(receiptId);
+		if (!items.isEmpty()) {
+			List<Long> itemIds = items.stream().map(Item::getId).toList();
+			List<Assignment> assignments = assignmentRepository.findAllByItemIdIn(itemIds);
+			if (!assignments.isEmpty()) {
+				assignmentRepository.deleteAllInBatch(assignments);
+			}
+			itemRepository.deleteAllInBatch(items);
+		}
+		receiptRepository.delete(receipt);
+	}
+
+	private Receipt findReceiptInRoom(Long roomId, Long receiptId) {
+		Receipt receipt = receiptRepository.findById(receiptId)
+			.orElseThrow(() -> new ApiException(ErrorCode.NOT_FOUND, "Receipt was not found."));
+		if (!receipt.getRoom().getId().equals(roomId)) {
+			throw new ApiException(ErrorCode.NOT_FOUND, "Receipt was not found in this room.");
+		}
+		return receipt;
+	}
+
+	private User resolvePayer(Long roomId, Long payerId) {
+		if (payerId == null) {
+			return null;
+		}
+		if (!roomMemberRepository.existsByRoomIdAndUserId(roomId, payerId)) {
+			throw new ApiException(ErrorCode.VALIDATION_ERROR, "Payer must be a member of this room.");
+		}
+		return userRepository.findById(payerId)
+			.orElseThrow(() -> new ApiException(ErrorCode.NOT_FOUND, "Payer was not found."));
 	}
 
 	private void validateImageFile(MultipartFile file) {
@@ -107,6 +186,77 @@ public class ReceiptService {
 		}
 
 		return filename;
+	}
+
+	public record ReceiptSummaryResult(
+		Long receiptId,
+		Long roomId,
+		String name,
+		ReceiptSourceType sourceType,
+		Long payerId,
+		String payerNickname,
+		Integer declaredTotal,
+		LocalDateTime createdAt
+	) {
+
+		private static ReceiptSummaryResult from(Receipt receipt) {
+			return new ReceiptSummaryResult(
+				receipt.getId(),
+				receipt.getRoom().getId(),
+				receipt.getName(),
+				receipt.getSourceType(),
+				receipt.getPayer() != null ? receipt.getPayer().getId() : null,
+				receipt.getPayer() != null ? receipt.getPayer().getNickname() : null,
+				receipt.getDeclaredTotal(),
+				receipt.getCreatedAt()
+			);
+		}
+
+	}
+
+	public record ReceiptDetailResult(
+		Long receiptId,
+		Long roomId,
+		String name,
+		ReceiptSourceType sourceType,
+		Long payerId,
+		String payerNickname,
+		Integer declaredTotal,
+		LocalDateTime createdAt,
+		List<ReceiptItemResult> items,
+		String warning
+	) {
+
+		private static ReceiptDetailResult from(Receipt receipt, List<Item> items) {
+			int itemTotal = items.stream().mapToInt(i -> i.getPrice() * i.getQuantity()).sum();
+			String warning = null;
+			if (receipt.getDeclaredTotal() != null && receipt.getDeclaredTotal() != itemTotal) {
+				warning = "검토 필요: 입력한 총액(" + receipt.getDeclaredTotal() + ")과 품목 합계(" + itemTotal + ")가 다릅니다.";
+			}
+			return new ReceiptDetailResult(
+				receipt.getId(),
+				receipt.getRoom().getId(),
+				receipt.getName(),
+				receipt.getSourceType(),
+				receipt.getPayer() != null ? receipt.getPayer().getId() : null,
+				receipt.getPayer() != null ? receipt.getPayer().getNickname() : null,
+				receipt.getDeclaredTotal(),
+				receipt.getCreatedAt(),
+				items.stream()
+					.map(item -> new ReceiptItemResult(
+						item.getId(),
+						item.getName(),
+						item.getPrice(),
+						item.getQuantity()
+					))
+					.toList(),
+				warning
+			);
+		}
+
+	}
+
+	public record ReceiptItemResult(Long itemId, String name, int price, int quantity) {
 	}
 
 	public record UploadReceiptImageResult(
@@ -140,6 +290,9 @@ public class ReceiptService {
 		Long roomId,
 		String name,
 		ReceiptSourceType sourceType,
+		Long payerId,
+		String payerNickname,
+		Integer declaredTotal,
 		List<ManualReceiptItemResult> items
 	) {
 
@@ -149,6 +302,9 @@ public class ReceiptService {
 				receipt.getRoom().getId(),
 				receipt.getName(),
 				receipt.getSourceType(),
+				receipt.getPayer() != null ? receipt.getPayer().getId() : null,
+				receipt.getPayer() != null ? receipt.getPayer().getNickname() : null,
+				receipt.getDeclaredTotal(),
 				items.stream()
 					.map(item -> new ManualReceiptItemResult(
 						item.getId(),

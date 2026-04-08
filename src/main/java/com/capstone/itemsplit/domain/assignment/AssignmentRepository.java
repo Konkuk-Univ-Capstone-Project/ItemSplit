@@ -1,5 +1,6 @@
 package com.capstone.itemsplit.domain.assignment;
 
+import java.util.Collection;
 import java.util.List;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -15,5 +16,12 @@ public interface AssignmentRepository extends JpaRepository<Assignment, Long> {
 		order by assignment.id asc
 		""")
 	List<Assignment> findAllByItemId(@Param("itemId") Long itemId);
+
+	@Query("""
+		select assignment
+		from Assignment assignment
+		where assignment.item.id in :itemIds
+		""")
+	List<Assignment> findAllByItemIdIn(@Param("itemIds") Collection<Long> itemIds);
 
 }
