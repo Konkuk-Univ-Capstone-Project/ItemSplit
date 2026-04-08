@@ -38,7 +38,6 @@ out/
 
 # Local environment files
 .env
-/report/
 /storage/
 
 # OS-generated files
