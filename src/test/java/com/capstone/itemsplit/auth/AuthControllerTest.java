@@ -1,5 +1,11 @@
 package com.capstone.itemsplit.auth;
 
+import com.capstone.itemsplit.domain.assignment.AssignmentRepository;
+import com.capstone.itemsplit.domain.item.ItemRepository;
+import com.capstone.itemsplit.domain.receipt.ReceiptRepository;
+import com.capstone.itemsplit.domain.room.RoomRepository;
+import com.capstone.itemsplit.domain.roominvitetoken.RoomInviteTokenRepository;
+import com.capstone.itemsplit.domain.roommember.RoomMemberRepository;
 import com.capstone.itemsplit.domain.user.User;
 import com.capstone.itemsplit.domain.user.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -32,6 +38,24 @@ class AuthControllerTest {
 	private UserRepository userRepository;
 
 	@Autowired
+	private AssignmentRepository assignmentRepository;
+
+	@Autowired
+	private ItemRepository itemRepository;
+
+	@Autowired
+	private ReceiptRepository receiptRepository;
+
+	@Autowired
+	private RoomInviteTokenRepository roomInviteTokenRepository;
+
+	@Autowired
+	private RoomMemberRepository roomMemberRepository;
+
+	@Autowired
+	private RoomRepository roomRepository;
+
+	@Autowired
 	private PasswordEncoder passwordEncoder;
 
 	@Autowired
@@ -39,6 +63,12 @@ class AuthControllerTest {
 
 	@BeforeEach
 	void setUp() {
+		assignmentRepository.deleteAll();
+		itemRepository.deleteAll();
+		receiptRepository.deleteAll();
+		roomInviteTokenRepository.deleteAll();
+		roomMemberRepository.deleteAll();
+		roomRepository.deleteAll();
 		userRepository.deleteAll();
 	}
 

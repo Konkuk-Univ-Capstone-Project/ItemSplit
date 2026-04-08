@@ -1,6 +1,9 @@
 package com.capstone.itemsplit.room;
 
 import com.capstone.itemsplit.auth.JwtTokenProvider;
+import com.capstone.itemsplit.domain.assignment.AssignmentRepository;
+import com.capstone.itemsplit.domain.item.ItemRepository;
+import com.capstone.itemsplit.domain.receipt.ReceiptRepository;
 import com.capstone.itemsplit.domain.room.Room;
 import com.capstone.itemsplit.domain.room.RoomRepository;
 import com.capstone.itemsplit.domain.roominvitetoken.RoomInviteToken;
@@ -57,10 +60,22 @@ class RoomControllerTest {
 	private RoomMemberRepository roomMemberRepository;
 
 	@Autowired
+	private AssignmentRepository assignmentRepository;
+
+	@Autowired
+	private ItemRepository itemRepository;
+
+	@Autowired
+	private ReceiptRepository receiptRepository;
+
+	@Autowired
 	private RoomInviteTokenRepository roomInviteTokenRepository;
 
 	@BeforeEach
 	void setUp() {
+		assignmentRepository.deleteAll();
+		itemRepository.deleteAll();
+		receiptRepository.deleteAll();
 		roomInviteTokenRepository.deleteAll();
 		roomMemberRepository.deleteAll();
 		roomRepository.deleteAll();

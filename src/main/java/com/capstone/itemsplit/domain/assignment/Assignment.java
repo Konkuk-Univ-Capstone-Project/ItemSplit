@@ -10,7 +10,6 @@ import lombok.*;
         uniqueConstraints = @UniqueConstraint(columnNames = {"item_id", "user_id"}))
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-
 public class Assignment {
 
     @Id
@@ -24,4 +23,13 @@ public class Assignment {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id", nullable = false)
     private User user;
+
+    private Assignment(Item item, User user) {
+        this.item = item;
+        this.user = user;
+    }
+
+    public static Assignment create(Item item, User user) {
+        return new Assignment(item, user);
+    }
 }

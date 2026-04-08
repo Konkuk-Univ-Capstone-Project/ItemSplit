@@ -1,9 +1,11 @@
 package com.capstone.itemsplit.domain.roommember;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 public interface RoomMemberRepository extends JpaRepository<RoomMember, Long> {
 
@@ -19,5 +21,15 @@ public interface RoomMemberRepository extends JpaRepository<RoomMember, Long> {
 		order by roomMember.id asc
 		""")
 	List<RoomMember> findAllByRoomId(Long roomId);
+
+	@Query("""
+		select roomMember
+		from RoomMember roomMember
+		join fetch roomMember.user user
+		where roomMember.room.id = :roomId
+		  and roomMember.user.id in :userIds
+		order by roomMember.id asc
+		""")
+	List<RoomMember> findAllByRoomIdAndUserIdIn(@Param("roomId") Long roomId, @Param("userIds") Collection<Long> userIds);
 
 }

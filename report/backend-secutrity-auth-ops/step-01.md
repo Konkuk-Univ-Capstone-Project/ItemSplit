@@ -1,9 +1,5 @@
 # Step 1 Report
 
-## 날짜
-
-2026-04-01 ~ 2026-04-02
-
 ## 목적
 
 로컬 실행 표준화: DB + profile + env + health 기반을 구성한다.
@@ -39,9 +35,3 @@
 - `curl -i http://localhost:8080/actuator/health` 성공
   - `HTTP/1.1 200`
   - `{"status":"UP","groups":["liveness","readiness"]}`
-
-## 다음 단계
-
-- 공통 응답 포맷 `ApiResponse<T>` 도입
-- 전역 예외 처리 `@RestControllerAdvice` 구성
-- Validation 에러/인증 에러/기본 에러를 동일 포맷으로 통일

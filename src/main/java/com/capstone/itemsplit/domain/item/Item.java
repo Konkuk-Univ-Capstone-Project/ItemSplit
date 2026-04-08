@@ -8,7 +8,6 @@ import lombok.*;
 @Table(name = "items")
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-
 public class Item {
 
     @Id
@@ -27,4 +26,15 @@ public class Item {
 
     @Column(nullable = false)
     private int quantity;
+
+    private Item(Receipt receipt, String name, int price, int quantity) {
+        this.receipt = receipt;
+        this.name = name;
+        this.price = price;
+        this.quantity = quantity;
+    }
+
+    public static Item create(Receipt receipt, String name, int price, int quantity) {
+        return new Item(receipt, name, price, quantity);
+    }
 }
