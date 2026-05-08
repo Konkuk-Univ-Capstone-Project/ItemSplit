@@ -1,7 +1,7 @@
-package com.capstone.itemsplit.domain.receipt;
+package com.capstone.itemsplit.receipt;
 
-import com.capstone.itemsplit.domain.room.Room;
-import com.capstone.itemsplit.domain.user.User;
+import com.capstone.itemsplit.room.Room;
+import com.capstone.itemsplit.user.User;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import jakarta.persistence.Column;

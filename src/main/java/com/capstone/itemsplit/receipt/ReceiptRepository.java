@@ -1,4 +1,4 @@
-package com.capstone.itemsplit.domain.receipt;
+package com.capstone.itemsplit.receipt;
 
 import java.util.List;
 import org.springframework.data.jpa.repository.JpaRepository;

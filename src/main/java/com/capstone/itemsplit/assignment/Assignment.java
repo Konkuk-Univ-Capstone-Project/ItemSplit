@@ -1,7 +1,7 @@
-package com.capstone.itemsplit.domain.assignment;
+package com.capstone.itemsplit.assignment;
 
-import com.capstone.itemsplit.domain.item.Item;
-import com.capstone.itemsplit.domain.user.User;
+import com.capstone.itemsplit.item.Item;
+import com.capstone.itemsplit.user.User;
 import jakarta.persistence.*;
 import lombok.*;
 

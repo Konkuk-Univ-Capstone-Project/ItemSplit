@@ -1,6 +1,6 @@
-package com.capstone.itemsplit.domain.item;
+package com.capstone.itemsplit.item;
 
-import com.capstone.itemsplit.domain.receipt.Receipt;
+import com.capstone.itemsplit.receipt.Receipt;
 import jakarta.persistence.*;
 import lombok.*;
 

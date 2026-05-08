@@ -1,4 +1,4 @@
-package com.capstone.itemsplit.domain.user;
+package com.capstone.itemsplit.user;
 
 import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;

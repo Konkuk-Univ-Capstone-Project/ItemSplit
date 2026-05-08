@@ -1,4 +1,4 @@
-package com.capstone.itemsplit.domain.user;
+package com.capstone.itemsplit.user;
 
 import com.capstone.itemsplit.common.exception.ApiException;
 import com.capstone.itemsplit.common.exception.ErrorCode;

@@ -1,4 +1,4 @@
-package com.capstone.itemsplit.domain.receipt;
+package com.capstone.itemsplit.receipt;
 
 public enum ReceiptSourceType {
 	IMAGE_UPLOAD,

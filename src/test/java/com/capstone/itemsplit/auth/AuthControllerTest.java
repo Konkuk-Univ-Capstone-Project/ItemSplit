@@ -1,13 +1,13 @@
 package com.capstone.itemsplit.auth;
 
-import com.capstone.itemsplit.domain.assignment.AssignmentRepository;
-import com.capstone.itemsplit.domain.item.ItemRepository;
-import com.capstone.itemsplit.domain.receipt.ReceiptRepository;
-import com.capstone.itemsplit.domain.room.RoomRepository;
-import com.capstone.itemsplit.domain.roominvitetoken.RoomInviteTokenRepository;
-import com.capstone.itemsplit.domain.roommember.RoomMemberRepository;
-import com.capstone.itemsplit.domain.user.User;
-import com.capstone.itemsplit.domain.user.UserRepository;
+import com.capstone.itemsplit.assignment.AssignmentRepository;
+import com.capstone.itemsplit.item.ItemRepository;
+import com.capstone.itemsplit.receipt.ReceiptRepository;
+import com.capstone.itemsplit.room.RoomRepository;
+import com.capstone.itemsplit.room.RoomInviteTokenRepository;
+import com.capstone.itemsplit.room.RoomMemberRepository;
+import com.capstone.itemsplit.user.User;
+import com.capstone.itemsplit.user.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;

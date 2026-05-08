@@ -2,9 +2,6 @@ package com.capstone.itemsplit.room;
 
 import com.capstone.itemsplit.common.exception.ApiException;
 import com.capstone.itemsplit.common.exception.ErrorCode;
-import com.capstone.itemsplit.domain.room.Room;
-import com.capstone.itemsplit.domain.room.RoomRepository;
-import com.capstone.itemsplit.domain.roommember.RoomMemberRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;

@@ -1,16 +1,11 @@
 package com.capstone.itemsplit.room;
 
 import com.capstone.itemsplit.auth.JwtTokenProvider;
-import com.capstone.itemsplit.domain.assignment.AssignmentRepository;
-import com.capstone.itemsplit.domain.item.ItemRepository;
-import com.capstone.itemsplit.domain.receipt.ReceiptRepository;
-import com.capstone.itemsplit.domain.room.Room;
-import com.capstone.itemsplit.domain.room.RoomRepository;
-import com.capstone.itemsplit.domain.roominvitetoken.RoomInviteToken;
-import com.capstone.itemsplit.domain.roominvitetoken.RoomInviteTokenRepository;
-import com.capstone.itemsplit.domain.roommember.RoomMemberRepository;
-import com.capstone.itemsplit.domain.user.User;
-import com.capstone.itemsplit.domain.user.UserRepository;
+import com.capstone.itemsplit.assignment.AssignmentRepository;
+import com.capstone.itemsplit.item.ItemRepository;
+import com.capstone.itemsplit.receipt.ReceiptRepository;
+import com.capstone.itemsplit.user.User;
+import com.capstone.itemsplit.user.UserRepository;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.LocalDateTime;
@@ -113,7 +108,7 @@ class RoomControllerTest {
 		User owner = createUser("owner@example.com", "owner");
 		User stranger = createUser("stranger@example.com", "stranger");
 		Room room = roomRepository.save(Room.create("Capstone Team", owner));
-		roomMemberRepository.save(com.capstone.itemsplit.domain.roommember.RoomMember.create(room, owner));
+		roomMemberRepository.save(com.capstone.itemsplit.room.RoomMember.create(room, owner));
 
 		mockMvc
 			.perform(
@@ -132,7 +127,7 @@ class RoomControllerTest {
 		User owner = createUser("owner@example.com", "owner");
 		User invitedUser = createUser("guest@example.com", "guest");
 		Room room = roomRepository.save(Room.create("Capstone Team", owner));
-		roomMemberRepository.save(com.capstone.itemsplit.domain.roommember.RoomMember.create(room, owner));
+		roomMemberRepository.save(com.capstone.itemsplit.room.RoomMember.create(room, owner));
 
 		MvcResult firstIssue = mockMvc
 			.perform(
@@ -180,7 +175,7 @@ class RoomControllerTest {
 		User guestOne = createUser("guest1@example.com", "guest1");
 		User guestTwo = createUser("guest2@example.com", "guest2");
 		Room room = roomRepository.save(Room.create("Capstone Team", owner));
-		roomMemberRepository.save(com.capstone.itemsplit.domain.roommember.RoomMember.create(room, owner));
+		roomMemberRepository.save(com.capstone.itemsplit.room.RoomMember.create(room, owner));
 
 		MvcResult issueResult = mockMvc
 			.perform(
@@ -224,7 +219,7 @@ class RoomControllerTest {
 		User owner = createUser("owner@example.com", "owner");
 		User guest = createUser("guest@example.com", "guest");
 		Room room = roomRepository.save(Room.create("Capstone Team", owner));
-		roomMemberRepository.save(com.capstone.itemsplit.domain.roommember.RoomMember.create(room, owner));
+		roomMemberRepository.save(com.capstone.itemsplit.room.RoomMember.create(room, owner));
 		roomInviteTokenRepository.save(
 			RoomInviteToken.create(room, "expired-token", LocalDateTime.now().minusDays(1))
 		);

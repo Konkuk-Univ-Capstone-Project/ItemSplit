@@ -1,15 +1,14 @@
 package com.capstone.itemsplit.receipt;
 
 import com.capstone.itemsplit.auth.JwtTokenProvider;
-import com.capstone.itemsplit.domain.assignment.AssignmentRepository;
-import com.capstone.itemsplit.domain.item.ItemRepository;
-import com.capstone.itemsplit.domain.receipt.ReceiptRepository;
-import com.capstone.itemsplit.domain.room.Room;
-import com.capstone.itemsplit.domain.room.RoomRepository;
-import com.capstone.itemsplit.domain.roommember.RoomMember;
-import com.capstone.itemsplit.domain.roommember.RoomMemberRepository;
-import com.capstone.itemsplit.domain.user.User;
-import com.capstone.itemsplit.domain.user.UserRepository;
+import com.capstone.itemsplit.assignment.AssignmentRepository;
+import com.capstone.itemsplit.item.ItemRepository;
+import com.capstone.itemsplit.room.Room;
+import com.capstone.itemsplit.room.RoomRepository;
+import com.capstone.itemsplit.room.RoomMember;
+import com.capstone.itemsplit.room.RoomMemberRepository;
+import com.capstone.itemsplit.user.User;
+import com.capstone.itemsplit.user.UserRepository;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import org.junit.jupiter.api.BeforeEach;

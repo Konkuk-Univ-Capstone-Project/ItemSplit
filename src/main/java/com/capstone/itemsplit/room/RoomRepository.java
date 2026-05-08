@@ -1,4 +1,4 @@
-package com.capstone.itemsplit.domain.room;
+package com.capstone.itemsplit.room;
 
 import org.springframework.data.jpa.repository.JpaRepository;
 

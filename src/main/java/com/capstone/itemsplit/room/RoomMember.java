@@ -1,7 +1,6 @@
-package com.capstone.itemsplit.domain.roommember;
+package com.capstone.itemsplit.room;
 
-import com.capstone.itemsplit.domain.room.Room;
-import com.capstone.itemsplit.domain.user.User;
+import com.capstone.itemsplit.user.User;
 import jakarta.persistence.*;
 import lombok.*;
 

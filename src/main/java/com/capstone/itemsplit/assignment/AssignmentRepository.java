@@ -1,4 +1,4 @@
-package com.capstone.itemsplit.domain.assignment;
+package com.capstone.itemsplit.assignment;
 
 import java.util.Collection;
 import java.util.List;

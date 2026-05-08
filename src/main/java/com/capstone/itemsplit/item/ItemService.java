@@ -2,11 +2,9 @@ package com.capstone.itemsplit.item;
 
 import com.capstone.itemsplit.common.exception.ApiException;
 import com.capstone.itemsplit.common.exception.ErrorCode;
-import com.capstone.itemsplit.domain.assignment.AssignmentRepository;
-import com.capstone.itemsplit.domain.item.Item;
-import com.capstone.itemsplit.domain.item.ItemRepository;
-import com.capstone.itemsplit.domain.receipt.Receipt;
-import com.capstone.itemsplit.domain.receipt.ReceiptRepository;
+import com.capstone.itemsplit.assignment.AssignmentRepository;
+import com.capstone.itemsplit.receipt.Receipt;
+import com.capstone.itemsplit.receipt.ReceiptRepository;
 import com.capstone.itemsplit.room.RoomAuthorizationService;
 import java.util.List;
 import lombok.RequiredArgsConstructor;

@@ -1,6 +1,6 @@
 package com.capstone.itemsplit.auth;
 
-import com.capstone.itemsplit.domain.user.User;
+import com.capstone.itemsplit.user.User;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;

@@ -2,8 +2,8 @@ package com.capstone.itemsplit.auth;
 
 import com.capstone.itemsplit.common.exception.ApiException;
 import com.capstone.itemsplit.common.exception.ErrorCode;
-import com.capstone.itemsplit.domain.user.User;
-import com.capstone.itemsplit.domain.user.UserService;
+import com.capstone.itemsplit.user.User;
+import com.capstone.itemsplit.user.UserService;
 import java.util.Locale;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.password.PasswordEncoder;

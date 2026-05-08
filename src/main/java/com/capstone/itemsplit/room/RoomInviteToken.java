@@ -1,6 +1,5 @@
-package com.capstone.itemsplit.domain.roominvitetoken;
+package com.capstone.itemsplit.room;
 
-import com.capstone.itemsplit.domain.room.Room;
 import jakarta.persistence.Access;
 import jakarta.persistence.AccessType;
 import jakarta.persistence.Column;

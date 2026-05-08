@@ -1,14 +1,14 @@
 package com.capstone.itemsplit.settlement;
 
-import com.capstone.itemsplit.domain.assignment.Assignment;
-import com.capstone.itemsplit.domain.assignment.AssignmentRepository;
-import com.capstone.itemsplit.domain.item.Item;
-import com.capstone.itemsplit.domain.item.ItemRepository;
-import com.capstone.itemsplit.domain.receipt.Receipt;
-import com.capstone.itemsplit.domain.receipt.ReceiptRepository;
-import com.capstone.itemsplit.domain.room.Room;
-import com.capstone.itemsplit.domain.roommember.RoomMember;
-import com.capstone.itemsplit.domain.roommember.RoomMemberRepository;
+import com.capstone.itemsplit.assignment.Assignment;
+import com.capstone.itemsplit.assignment.AssignmentRepository;
+import com.capstone.itemsplit.item.Item;
+import com.capstone.itemsplit.item.ItemRepository;
+import com.capstone.itemsplit.receipt.Receipt;
+import com.capstone.itemsplit.receipt.ReceiptRepository;
+import com.capstone.itemsplit.room.Room;
+import com.capstone.itemsplit.room.RoomMember;
+import com.capstone.itemsplit.room.RoomMemberRepository;
 import com.capstone.itemsplit.room.RoomAuthorizationService;
 import java.util.HashMap;
 import java.util.List;

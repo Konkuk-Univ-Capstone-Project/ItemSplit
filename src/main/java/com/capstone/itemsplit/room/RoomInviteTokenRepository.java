@@ -1,4 +1,4 @@
-package com.capstone.itemsplit.domain.roominvitetoken;
+package com.capstone.itemsplit.room;
 
 import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;

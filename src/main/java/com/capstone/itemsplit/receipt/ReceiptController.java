@@ -4,7 +4,6 @@ import com.capstone.itemsplit.auth.AuthenticatedUser;
 import com.capstone.itemsplit.common.exception.ApiException;
 import com.capstone.itemsplit.common.exception.ErrorCode;
 import com.capstone.itemsplit.common.response.ApiResponse;
-import com.capstone.itemsplit.domain.receipt.ReceiptSourceType;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;

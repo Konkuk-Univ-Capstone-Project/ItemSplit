@@ -1,4 +1,4 @@
-package com.capstone.itemsplit.domain.roommember;
+package com.capstone.itemsplit.room;
 
 import java.util.Collection;
 import java.util.List;
