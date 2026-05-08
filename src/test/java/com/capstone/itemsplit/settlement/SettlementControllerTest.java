@@ -158,8 +158,8 @@ class SettlementControllerTest {
 	}
 
 	@Test
-	@DisplayName("나머지(라운딩)는 방장에게 귀속된다")
-	void remainderIsAssignedToRoomOwner() throws Exception {
+	@DisplayName("나머지(라운딩)는 참여자 중 1명에게 귀속되며 합계는 정확히 맞는다")
+	void remainderIsAssignedToOneAssigneeAndTotalIsExact() throws Exception {
 		User owner = createUser("owner@test.com", "owner");
 		User a = createUser("a@test.com", "a");
 		User b = createUser("b@test.com", "b");
@@ -168,7 +168,7 @@ class SettlementControllerTest {
 		roomMemberRepository.save(RoomMember.create(room, a));
 		roomMemberRepository.save(RoomMember.create(room, b));
 
-		// 10000원을 3명이 나누면 3333 * 3 = 9999, 나머지 1원은 방장에게
+		// 10000원을 3명이 나누면 3333 * 3 = 9999, 나머지 1원은 seeded random으로 참여자 중 1명에게
 		Receipt receipt = receiptRepository.save(Receipt.createManual(room, "식사", null, null, null));
 		Item item = itemRepository.save(Item.create(receipt, "찌개", 10000, 1));
 		assignmentRepository.save(Assignment.create(item, owner));
@@ -178,9 +178,22 @@ class SettlementControllerTest {
 		mockMvc.perform(get("/api/rooms/{roomId}/settlements", room.getId())
 				.header(HttpHeaders.AUTHORIZATION, bearer(owner)))
 			.andExpect(status().isOk())
-			.andExpect(jsonPath("$.data.members[?(@.nickname=='owner')].burden").value(3334))
-			.andExpect(jsonPath("$.data.members[?(@.nickname=='a')].burden").value(3333))
-			.andExpect(jsonPath("$.data.members[?(@.nickname=='b')].burden").value(3333));
+			// 세 명의 부담 합계는 반드시 10000
+			.andExpect(jsonPath("$.data.members[?(@.nickname=='owner')].burden").isArray())
+			.andExpect(jsonPath("$.data.members[?(@.nickname=='a')].burden").isArray())
+			.andExpect(jsonPath("$.data.members[?(@.nickname=='b')].burden").isArray())
+			// 각자 3333 또는 3334 (합계 검증은 아래 custom matcher 대신 최소 합으로 대체)
+			.andExpect(result -> {
+				com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+				var body = mapper.readTree(result.getResponse().getContentAsString());
+				long total = 0;
+				for (var m : body.at("/data/members")) {
+					long burden = m.get("burden").asLong();
+					assert burden == 3333 || burden == 3334 : "burden should be 3333 or 3334, was " + burden;
+					total += burden;
+				}
+				assert total == 10000 : "total burden should be 10000, was " + total;
+			});
 	}
 
 	@Test
