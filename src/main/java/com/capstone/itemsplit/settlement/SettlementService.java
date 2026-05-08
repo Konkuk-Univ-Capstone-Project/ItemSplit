@@ -13,6 +13,7 @@ import com.capstone.itemsplit.room.RoomAuthorizationService;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Random;
 import java.util.Set;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
@@ -32,7 +33,6 @@ public class SettlementService {
 
 	public SettlementResult calculate(Long roomId, Long userId) {
 		Room room = roomAuthorizationService.checkMember(roomId, userId);
-		Long ownerId = room.getOwner().getId();
 
 		List<RoomMember> members = roomMemberRepository.findAllByRoomId(roomId);
 		List<Receipt> receipts = receiptRepository.findAllByRoomId(roomId);
@@ -88,8 +88,12 @@ public class SettlementService {
 				burden.merge(memberId, perPerson, Long::sum);
 			}
 
-			// 나머지는 방장에게
-			burden.merge(ownerId, remainder, Long::sum);
+			// 나머지는 품목 참여자 중 seeded random으로 선택 (roomId+itemId 시드 → 조회마다 동일)
+			if (remainder > 0) {
+				int pickedIndex = new Random(roomId * 1_000_003L + item.getId()).nextInt(count);
+				long pickedId = itemAssignments.get(pickedIndex).getUser().getId();
+				burden.merge(pickedId, remainder, Long::sum);
+			}
 		}
 
 		// 결제자 지불액 계산 (배정된 품목 합산만)
