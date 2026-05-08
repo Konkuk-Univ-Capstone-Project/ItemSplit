@@ -72,7 +72,7 @@ class SettlementControllerTest {
 
 	@Test
 	@DisplayName("참여자별 품목이 다를 때 각자 부담액이 다르게 계산된다")
-	void differentAssigneesPerItemProduceDifferentBurdens() throws Exception {
+	void 품목별_참여자가_다르면_각자_부담액이_다르게_계산된다() throws Exception {
 		User owner = createUser("owner@test.com", "owner");
 		User member = createUser("member@test.com", "member");
 		Room room = roomRepository.save(Room.create("dinner", owner));
@@ -99,7 +99,7 @@ class SettlementControllerTest {
 
 	@Test
 	@DisplayName("결제자가 있으면 paid와 net이 계산된다")
-	void payerReceivesCorrectNetAmount() throws Exception {
+	void 결제자가_있으면_paid와_net이_계산된다() throws Exception {
 		User owner = createUser("owner@test.com", "owner");
 		User member = createUser("member@test.com", "member");
 		Room room = roomRepository.save(Room.create("dinner", owner));
@@ -126,7 +126,7 @@ class SettlementControllerTest {
 
 	@Test
 	@DisplayName("배정 없는 품목은 정산에서 제외된다")
-	void itemWithNoAssigneesIsExcludedFromSettlement() throws Exception {
+	void 배정_없는_품목은_정산에서_제외된다() throws Exception {
 		User owner = createUser("owner@test.com", "owner");
 		Room room = roomRepository.save(Room.create("room", owner));
 		roomMemberRepository.save(RoomMember.create(room, owner));
@@ -142,7 +142,7 @@ class SettlementControllerTest {
 
 	@Test
 	@DisplayName("참여자가 1명인 품목은 전액 그 사람이 부담한다")
-	void singleAssigneePaysFullAmount() throws Exception {
+	void 참여자가_한_명인_품목은_전액_그_사람이_부담한다() throws Exception {
 		User owner = createUser("owner@test.com", "owner");
 		Room room = roomRepository.save(Room.create("room", owner));
 		roomMemberRepository.save(RoomMember.create(room, owner));
@@ -159,7 +159,7 @@ class SettlementControllerTest {
 
 	@Test
 	@DisplayName("나머지(라운딩)는 참여자 중 1명에게 귀속되며 합계는 정확히 맞는다")
-	void remainderIsAssignedToOneAssigneeAndTotalIsExact() throws Exception {
+	void 라운딩_나머지는_참여자_중_한_명에게_귀속되고_합계는_맞는다() throws Exception {
 		User owner = createUser("owner@test.com", "owner");
 		User a = createUser("a@test.com", "a");
 		User b = createUser("b@test.com", "b");
@@ -198,7 +198,7 @@ class SettlementControllerTest {
 
 	@Test
 	@DisplayName("영수증과 품목이 없으면 모든 멤버의 부담액이 0이다")
-	void emptyRoomReturnsZeroBurdens() throws Exception {
+	void 영수증과_품목이_없으면_모든_멤버의_부담액이_0이다() throws Exception {
 		User owner = createUser("owner@test.com", "owner");
 		Room room = roomRepository.save(Room.create("room", owner));
 		roomMemberRepository.save(RoomMember.create(room, owner));
@@ -211,7 +211,7 @@ class SettlementControllerTest {
 
 	@Test
 	@DisplayName("비멤버는 정산 조회 시 403을 받는다")
-	void nonMemberGetsForbidden() throws Exception {
+	void 비멤버는_정산_조회시_403을_받는다() throws Exception {
 		User owner = createUser("owner@test.com", "owner");
 		User outsider = createUser("out@test.com", "outsider");
 		Room room = roomRepository.save(Room.create("room", owner));

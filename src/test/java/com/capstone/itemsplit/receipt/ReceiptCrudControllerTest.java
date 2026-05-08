@@ -74,8 +74,8 @@ class ReceiptCrudControllerTest {
 	}
 
 	@Test
-	@DisplayName("GET /api/rooms/{roomId}/receipts returns all receipts for a room member")
-	void getReceiptsReturnsListForMember() throws Exception {
+	@DisplayName("GET /api/rooms/{roomId}/receipts 요청은 방 멤버의 모든 영수증을 반환한다")
+	void 영수증_목록_조회는_방_멤버의_영수증을_반환한다() throws Exception {
 		User owner = createUser("owner@example.com", "owner");
 		Room room = roomRepository.save(Room.create("Capstone Team", owner));
 		roomMemberRepository.save(RoomMember.create(room, owner));
@@ -93,8 +93,8 @@ class ReceiptCrudControllerTest {
 	}
 
 	@Test
-	@DisplayName("GET /api/rooms/{roomId}/receipts/{receiptId} returns receipt detail with items")
-	void getReceiptReturnsDetailWithItems() throws Exception {
+	@DisplayName("GET /api/rooms/{roomId}/receipts/{receiptId} 요청은 품목을 포함한 영수증 상세를 반환한다")
+	void 영수증_상세_조회는_품목을_함께_반환한다() throws Exception {
 		User owner = createUser("owner@example.com", "owner");
 		Room room = roomRepository.save(Room.create("Capstone Team", owner));
 		roomMemberRepository.save(RoomMember.create(room, owner));
@@ -115,8 +115,8 @@ class ReceiptCrudControllerTest {
 	}
 
 	@Test
-	@DisplayName("GET /api/rooms/{roomId}/receipts/{receiptId} returns warning when declaredTotal does not match item sum")
-	void getReceiptReturnsWarningOnTotalMismatch() throws Exception {
+	@DisplayName("GET /api/rooms/{roomId}/receipts/{receiptId} 요청은 선언 합계와 품목 합계가 다르면 경고를 반환한다")
+	void 영수증_상세_조회는_선언_합계와_품목_합계가_다르면_경고를_반환한다() throws Exception {
 		User owner = createUser("owner@example.com", "owner");
 		Room room = roomRepository.save(Room.create("Capstone Team", owner));
 		roomMemberRepository.save(RoomMember.create(room, owner));
@@ -133,8 +133,8 @@ class ReceiptCrudControllerTest {
 	}
 
 	@Test
-	@DisplayName("PUT /api/rooms/{roomId}/receipts/{receiptId} updates receipt name and payer")
-	void updateReceiptUpdatesFields() throws Exception {
+	@DisplayName("PUT /api/rooms/{roomId}/receipts/{receiptId} 요청은 영수증 이름과 결제자를 수정한다")
+	void 영수증_수정은_이름과_결제자를_변경한다() throws Exception {
 		User owner = createUser("owner@example.com", "owner");
 		Room room = roomRepository.save(Room.create("Capstone Team", owner));
 		roomMemberRepository.save(RoomMember.create(room, owner));
@@ -160,8 +160,8 @@ class ReceiptCrudControllerTest {
 	}
 
 	@Test
-	@DisplayName("DELETE /api/rooms/{roomId}/receipts/{receiptId} deletes receipt along with its items and assignments")
-	void deleteReceiptCascadesItemsAndAssignments() throws Exception {
+	@DisplayName("DELETE /api/rooms/{roomId}/receipts/{receiptId} 요청은 영수증과 품목 및 배정을 함께 삭제한다")
+	void 영수증_삭제는_품목과_배정을_함께_삭제한다() throws Exception {
 		User owner = createUser("owner@example.com", "owner");
 		Room room = roomRepository.save(Room.create("Capstone Team", owner));
 		roomMemberRepository.save(RoomMember.create(room, owner));
@@ -182,8 +182,8 @@ class ReceiptCrudControllerTest {
 	}
 
 	@Test
-	@DisplayName("POST /api/rooms/{roomId}/receipts/manual saves payer and declaredTotal when provided")
-	void createManualReceiptSavesPayerAndDeclaredTotal() throws Exception {
+	@DisplayName("POST /api/rooms/{roomId}/receipts/manual 요청은 결제자와 선언 합계가 있으면 함께 저장한다")
+	void 수기_영수증_생성은_결제자와_선언_합계를_저장한다() throws Exception {
 		User owner = createUser("owner@example.com", "owner");
 		Room room = roomRepository.save(Room.create("Capstone Team", owner));
 		roomMemberRepository.save(RoomMember.create(room, owner));
@@ -211,8 +211,8 @@ class ReceiptCrudControllerTest {
 	}
 
 	@Test
-	@DisplayName("DELETE /api/rooms/{roomId}/receipts/{receiptId} returns forbidden for non-members")
-	void deleteReceiptRequiresRoomMembership() throws Exception {
+	@DisplayName("DELETE /api/rooms/{roomId}/receipts/{receiptId} 요청은 방 멤버가 아니면 403을 반환한다")
+	void 영수증_삭제는_방_멤버가_아니면_403을_반환한다() throws Exception {
 		User owner = createUser("owner@example.com", "owner");
 		User stranger = createUser("stranger@example.com", "stranger");
 		Room room = roomRepository.save(Room.create("Capstone Team", owner));

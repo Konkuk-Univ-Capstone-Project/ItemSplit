@@ -78,8 +78,8 @@ class ReceiptControllerTest {
 	}
 
 	@Test
-	@DisplayName("POST /api/rooms/{roomId}/receipts/image stores the file and saves receipt metadata for a room member")
-	void uploadReceiptImageStoresFileAndMetadata() throws Exception {
+	@DisplayName("POST /api/rooms/{roomId}/receipts/image 요청은 파일과 영수증 메타데이터를 저장한다")
+	void 이미지_영수증_업로드는_파일과_메타데이터를_저장한다() throws Exception {
 		User owner = createUser("owner@example.com", "owner");
 		Room room = roomRepository.save(Room.create("Capstone Team", owner));
 		roomMemberRepository.save(RoomMember.create(room, owner));
@@ -112,8 +112,8 @@ class ReceiptControllerTest {
 	}
 
 	@Test
-	@DisplayName("POST /api/rooms/{roomId}/receipts/image returns forbidden for non-members")
-	void uploadReceiptImageRequiresRoomMembership() throws Exception {
+	@DisplayName("POST /api/rooms/{roomId}/receipts/image 요청은 방 멤버가 아니면 403을 반환한다")
+	void 이미지_영수증_업로드는_방_멤버가_아니면_403을_반환한다() throws Exception {
 		User owner = createUser("owner@example.com", "owner");
 		User stranger = createUser("stranger@example.com", "stranger");
 		Room room = roomRepository.save(Room.create("Capstone Team", owner));
@@ -139,8 +139,8 @@ class ReceiptControllerTest {
 	}
 
 	@Test
-	@DisplayName("POST /api/rooms/{roomId}/receipts/image rejects non-image files")
-	void uploadReceiptImageRejectsNonImageFiles() throws Exception {
+	@DisplayName("POST /api/rooms/{roomId}/receipts/image 요청은 이미지가 아닌 파일을 거부한다")
+	void 이미지_영수증_업로드는_이미지가_아닌_파일을_거부한다() throws Exception {
 		User owner = createUser("owner@example.com", "owner");
 		Room room = roomRepository.save(Room.create("Capstone Team", owner));
 		roomMemberRepository.save(RoomMember.create(room, owner));
@@ -167,8 +167,8 @@ class ReceiptControllerTest {
 	}
 
 	@Test
-	@DisplayName("POST /api/rooms/{roomId}/receipts/manual creates a manual receipt and its items for a room member")
-	void createManualReceiptStoresTextItems() throws Exception {
+	@DisplayName("POST /api/rooms/{roomId}/receipts/manual 요청은 수기 영수증과 품목을 저장한다")
+	void 수기_영수증_생성은_영수증과_품목을_저장한다() throws Exception {
 		User owner = createUser("owner@example.com", "owner");
 		Room room = roomRepository.save(Room.create("Capstone Team", owner));
 		roomMemberRepository.save(RoomMember.create(room, owner));
@@ -204,8 +204,8 @@ class ReceiptControllerTest {
 	}
 
 	@Test
-	@DisplayName("POST /api/rooms/{roomId}/receipts/manual returns forbidden for non-members")
-	void createManualReceiptRequiresRoomMembership() throws Exception {
+	@DisplayName("POST /api/rooms/{roomId}/receipts/manual 요청은 방 멤버가 아니면 403을 반환한다")
+	void 수기_영수증_생성은_방_멤버가_아니면_403을_반환한다() throws Exception {
 		User owner = createUser("owner@example.com", "owner");
 		User stranger = createUser("stranger@example.com", "stranger");
 		Room room = roomRepository.save(Room.create("Capstone Team", owner));
@@ -232,8 +232,8 @@ class ReceiptControllerTest {
 	}
 
 	@Test
-	@DisplayName("POST /api/rooms/{roomId}/receipts/manual validates empty item input")
-	void createManualReceiptValidatesItems() throws Exception {
+	@DisplayName("POST /api/rooms/{roomId}/receipts/manual 요청은 빈 품목 목록을 검증한다")
+	void 수기_영수증_생성은_빈_품목_목록을_검증한다() throws Exception {
 		User owner = createUser("owner@example.com", "owner");
 		Room room = roomRepository.save(Room.create("Capstone Team", owner));
 		roomMemberRepository.save(RoomMember.create(room, owner));

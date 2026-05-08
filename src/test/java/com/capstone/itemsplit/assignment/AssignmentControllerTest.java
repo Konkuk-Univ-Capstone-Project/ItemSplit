@@ -74,8 +74,8 @@ class AssignmentControllerTest {
 	}
 
 	@Test
-	@DisplayName("PUT assignees sets [A, B], replaces with [B, C], and GET returns the latest assignees")
-	void replaceAndGetAssignees() throws Exception {
+	@DisplayName("PUT assignees 요청은 담당자를 교체하고 GET 요청은 최신 담당자를 반환한다")
+	void 담당자_교체_후_조회하면_최신_담당자를_반환한다() throws Exception {
 		User owner = createUser("owner@example.com", "owner");
 		User memberOne = createUser("member1@example.com", "member1");
 		User memberTwo = createUser("member2@example.com", "member2");
@@ -133,8 +133,8 @@ class AssignmentControllerTest {
 	}
 
 	@Test
-	@DisplayName("PUT assignees allows an empty array to clear all current assignees")
-	void replaceAssigneesAllowsClearingAll() throws Exception {
+	@DisplayName("PUT assignees 요청은 빈 배열로 모든 담당자를 해제할 수 있다")
+	void 빈_배열로_담당자를_모두_해제할_수_있다() throws Exception {
 		User owner = createUser("owner@example.com", "owner");
 		User memberOne = createUser("member1@example.com", "member1");
 		User memberTwo = createUser("member2@example.com", "member2");
@@ -167,8 +167,8 @@ class AssignmentControllerTest {
 	}
 
 	@Test
-	@DisplayName("GET assignees returns unauthorized when authentication is missing")
-	void getAssigneesRequiresAuthentication() throws Exception {
+	@DisplayName("GET assignees 요청은 인증이 없으면 401을 반환한다")
+	void 담당자_조회는_인증이_없으면_401을_반환한다() throws Exception {
 		User owner = createUser("owner@example.com", "owner");
 		ItemFixture fixture = createItemFixture("Capstone Team", "Dinner", "Pasta", owner);
 
@@ -184,8 +184,8 @@ class AssignmentControllerTest {
 	}
 
 	@Test
-	@DisplayName("PUT assignees returns forbidden when the requester is not a room member")
-	void replaceAssigneesRequiresRoomMembership() throws Exception {
+	@DisplayName("PUT assignees 요청은 요청자가 방 멤버가 아니면 403을 반환한다")
+	void 담당자_변경은_방_멤버가_아니면_403을_반환한다() throws Exception {
 		User owner = createUser("owner@example.com", "owner");
 		User stranger = createUser("stranger@example.com", "stranger");
 		ItemFixture fixture = createItemFixture("Capstone Team", "Dinner", "Pasta", owner);
@@ -206,8 +206,8 @@ class AssignmentControllerTest {
 	}
 
 	@Test
-	@DisplayName("PUT assignees rejects users who belong to another room")
-	void replaceAssigneesRejectsUsersOutsideRoom() throws Exception {
+	@DisplayName("PUT assignees 요청은 다른 방 사용자를 담당자로 지정하면 검증 오류를 반환한다")
+	void 다른_방_사용자를_담당자로_지정하면_검증_오류를_반환한다() throws Exception {
 		User owner = createUser("owner@example.com", "owner");
 		User member = createUser("member@example.com", "member");
 		User outsider = createUser("outsider@example.com", "outsider");
@@ -231,8 +231,8 @@ class AssignmentControllerTest {
 	}
 
 	@Test
-	@DisplayName("PUT assignees returns not found when the room does not exist")
-	void replaceAssigneesFailsWhenRoomDoesNotExist() throws Exception {
+	@DisplayName("PUT assignees 요청은 방이 없으면 404를 반환한다")
+	void 존재하지_않는_방의_담당자_변경은_404를_반환한다() throws Exception {
 		User owner = createUser("owner@example.com", "owner");
 		User member = createUser("member@example.com", "member");
 		ItemFixture fixture = createItemFixture("Capstone Team", "Dinner", "Pasta", owner, member);
@@ -253,8 +253,8 @@ class AssignmentControllerTest {
 	}
 
 	@Test
-	@DisplayName("PUT assignees returns not found when the receipt does not exist")
-	void replaceAssigneesFailsWhenReceiptDoesNotExist() throws Exception {
+	@DisplayName("PUT assignees 요청은 영수증이 없으면 404를 반환한다")
+	void 존재하지_않는_영수증의_담당자_변경은_404를_반환한다() throws Exception {
 		User owner = createUser("owner@example.com", "owner");
 		User member = createUser("member@example.com", "member");
 		ItemFixture fixture = createItemFixture("Capstone Team", "Dinner", "Pasta", owner, member);
@@ -275,8 +275,8 @@ class AssignmentControllerTest {
 	}
 
 	@Test
-	@DisplayName("PUT assignees returns not found when the item does not exist")
-	void replaceAssigneesFailsWhenItemDoesNotExist() throws Exception {
+	@DisplayName("PUT assignees 요청은 품목이 없으면 404를 반환한다")
+	void 존재하지_않는_품목의_담당자_변경은_404를_반환한다() throws Exception {
 		User owner = createUser("owner@example.com", "owner");
 		User member = createUser("member@example.com", "member");
 		ItemFixture fixture = createItemFixture("Capstone Team", "Dinner", "Pasta", owner, member);
@@ -297,8 +297,8 @@ class AssignmentControllerTest {
 	}
 
 	@Test
-	@DisplayName("PUT assignees returns not found when a member id does not exist")
-	void replaceAssigneesFailsWhenMemberDoesNotExist() throws Exception {
+	@DisplayName("PUT assignees 요청은 존재하지 않는 멤버 ID가 있으면 404를 반환한다")
+	void 존재하지_않는_멤버를_담당자로_지정하면_404를_반환한다() throws Exception {
 		User owner = createUser("owner@example.com", "owner");
 		ItemFixture fixture = createItemFixture("Capstone Team", "Dinner", "Pasta", owner);
 
@@ -318,8 +318,8 @@ class AssignmentControllerTest {
 	}
 
 	@Test
-	@DisplayName("PUT assignees returns not found when the receipt does not belong to the room")
-	void replaceAssigneesFailsWhenReceiptDoesNotBelongToRoom() throws Exception {
+	@DisplayName("PUT assignees 요청은 영수증이 방에 속하지 않으면 404를 반환한다")
+	void 방에_속하지_않은_영수증의_담당자_변경은_404를_반환한다() throws Exception {
 		User owner = createUser("owner@example.com", "owner");
 		User otherOwner = createUser("other@example.com", "other");
 		ItemFixture fixture = createItemFixture("Capstone Team", "Dinner", "Pasta", owner);
@@ -341,8 +341,8 @@ class AssignmentControllerTest {
 	}
 
 	@Test
-	@DisplayName("PUT assignees returns not found when the item does not belong to the receipt")
-	void replaceAssigneesFailsWhenItemDoesNotBelongToReceipt() throws Exception {
+	@DisplayName("PUT assignees 요청은 품목이 영수증에 속하지 않으면 404를 반환한다")
+	void 영수증에_속하지_않은_품목의_담당자_변경은_404를_반환한다() throws Exception {
 		User owner = createUser("owner@example.com", "owner");
 		ItemFixture fixture = createItemFixture("Capstone Team", "Dinner", "Pasta", owner);
 		Receipt otherReceipt = receiptRepository.save(Receipt.createManual(fixture.room(), "Late Night", null, null, null));
@@ -364,8 +364,8 @@ class AssignmentControllerTest {
 	}
 
 	@Test
-	@DisplayName("PUT assignees returns validation error details when memberIds is null")
-	void replaceAssigneesValidatesRequestBody() throws Exception {
+	@DisplayName("PUT assignees 요청은 memberIds가 null이면 검증 오류 상세를 반환한다")
+	void memberIds가_null이면_검증_오류를_반환한다() throws Exception {
 		User owner = createUser("owner@example.com", "owner");
 		ItemFixture fixture = createItemFixture("Capstone Team", "Dinner", "Pasta", owner);
 

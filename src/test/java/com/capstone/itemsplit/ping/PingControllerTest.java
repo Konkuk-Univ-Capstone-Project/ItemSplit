@@ -29,8 +29,8 @@ class PingControllerTest {
 	private JwtAuthenticationFilter jwtAuthenticationFilter;
 
 	@Test
-	@DisplayName("GET /api/ping returns the unified success response format")
-	void pingReturnsSuccessResponse() throws Exception {
+	@DisplayName("GET /api/ping 요청은 통합 성공 응답 형식을 반환한다")
+	void 핑_요청은_통합_성공_응답을_반환한다() throws Exception {
 		mockMvc
 			.perform(get("/api/ping"))
 			.andExpect(status().isOk())
@@ -40,8 +40,8 @@ class PingControllerTest {
 	}
 
 	@Test
-	@DisplayName("POST /api/ping/echo returns validation errors in the unified failure response format")
-	void echoReturnsValidationFailureResponse() throws Exception {
+	@DisplayName("POST /api/ping/echo 요청은 검증 오류를 통합 실패 응답 형식으로 반환한다")
+	void 에코_요청은_검증_실패_응답을_반환한다() throws Exception {
 		mockMvc
 			.perform(
 				post("/api/ping/echo")
@@ -61,8 +61,8 @@ class PingControllerTest {
 	}
 
 	@Test
-	@DisplayName("ApiException is converted to the unified not found response format")
-	void apiExceptionReturnsNotFoundResponse() throws Exception {
+	@DisplayName("ApiException은 통합 NOT_FOUND 응답으로 변환된다")
+	void API_예외는_통합_NOT_FOUND_응답으로_변환된다() throws Exception {
 		mockMvc
 			.perform(get("/test-errors/not-found"))
 			.andExpect(status().isNotFound())
@@ -72,8 +72,8 @@ class PingControllerTest {
 	}
 
 	@Test
-	@DisplayName("AuthenticationException is converted to the unified unauthorized response format")
-	void authenticationExceptionReturnsUnauthorizedResponse() throws Exception {
+	@DisplayName("AuthenticationException은 통합 UNAUTHORIZED 응답으로 변환된다")
+	void 인증_예외는_통합_UNAUTHORIZED_응답으로_변환된다() throws Exception {
 		mockMvc
 			.perform(get("/test-errors/unauthorized"))
 			.andExpect(status().isUnauthorized())
@@ -83,8 +83,8 @@ class PingControllerTest {
 	}
 
 	@Test
-	@DisplayName("AccessDeniedException is converted to the unified forbidden response format")
-	void accessDeniedExceptionReturnsForbiddenResponse() throws Exception {
+	@DisplayName("AccessDeniedException은 통합 FORBIDDEN 응답으로 변환된다")
+	void 접근_거부_예외는_통합_FORBIDDEN_응답으로_변환된다() throws Exception {
 		mockMvc
 			.perform(get("/test-errors/forbidden"))
 			.andExpect(status().isForbidden())
@@ -94,8 +94,8 @@ class PingControllerTest {
 	}
 
 	@Test
-	@DisplayName("ValidationException is converted to the unified validation error response format")
-	void validationExceptionReturnsValidationErrorResponse() throws Exception {
+	@DisplayName("ValidationException은 통합 VALIDATION_ERROR 응답으로 변환된다")
+	void 검증_예외는_통합_VALIDATION_ERROR_응답으로_변환된다() throws Exception {
 		mockMvc
 			.perform(get("/test-errors/validation"))
 			.andExpect(status().isBadRequest())
@@ -105,8 +105,8 @@ class PingControllerTest {
 	}
 
 	@Test
-	@DisplayName("NoSuchElementException is converted to the unified not found response format")
-	void noSuchElementExceptionReturnsNotFoundResponse() throws Exception {
+	@DisplayName("NoSuchElementException은 통합 NOT_FOUND 응답으로 변환된다")
+	void 요소_없음_예외는_통합_NOT_FOUND_응답으로_변환된다() throws Exception {
 		mockMvc
 			.perform(get("/test-errors/missing"))
 			.andExpect(status().isNotFound())
@@ -116,8 +116,8 @@ class PingControllerTest {
 	}
 
 	@Test
-	@DisplayName("Unhandled exceptions are converted to the unified internal error response format")
-	void exceptionReturnsInternalErrorResponse() throws Exception {
+	@DisplayName("처리되지 않은 예외는 통합 INTERNAL_ERROR 응답으로 변환된다")
+	void 처리되지_않은_예외는_통합_INTERNAL_ERROR_응답으로_변환된다() throws Exception {
 		mockMvc
 			.perform(get("/test-errors/internal"))
 			.andExpect(status().isInternalServerError())

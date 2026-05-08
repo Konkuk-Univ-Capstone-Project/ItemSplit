@@ -73,8 +73,8 @@ class ItemControllerTest {
 	}
 
 	@Test
-	@DisplayName("POST /api/rooms/{roomId}/receipts/{receiptId}/items adds a new item to the receipt")
-	void addItemSavesItemToReceipt() throws Exception {
+	@DisplayName("POST /api/rooms/{roomId}/receipts/{receiptId}/items 요청은 영수증에 새 품목을 추가한다")
+	void 영수증에_새_품목을_추가한다() throws Exception {
 		User owner = createUser("owner@example.com", "owner");
 		Room room = roomRepository.save(Room.create("Capstone Team", owner));
 		roomMemberRepository.save(RoomMember.create(room, owner));
@@ -100,8 +100,8 @@ class ItemControllerTest {
 	}
 
 	@Test
-	@DisplayName("PUT /api/rooms/{roomId}/receipts/{receiptId}/items/{itemId} updates item fields")
-	void updateItemChangesNamePriceQuantity() throws Exception {
+	@DisplayName("PUT /api/rooms/{roomId}/receipts/{receiptId}/items/{itemId} 요청은 품목 정보를 수정한다")
+	void 품목_정보를_수정한다() throws Exception {
 		User owner = createUser("owner@example.com", "owner");
 		Room room = roomRepository.save(Room.create("Capstone Team", owner));
 		roomMemberRepository.save(RoomMember.create(room, owner));
@@ -129,8 +129,8 @@ class ItemControllerTest {
 	}
 
 	@Test
-	@DisplayName("DELETE /api/rooms/{roomId}/receipts/{receiptId}/items/{itemId} deletes item and its assignments")
-	void deleteItemRemovesItemAndAssignments() throws Exception {
+	@DisplayName("DELETE /api/rooms/{roomId}/receipts/{receiptId}/items/{itemId} 요청은 품목과 배정을 함께 삭제한다")
+	void 품목과_배정을_함께_삭제한다() throws Exception {
 		User owner = createUser("owner@example.com", "owner");
 		Room room = roomRepository.save(Room.create("Capstone Team", owner));
 		roomMemberRepository.save(RoomMember.create(room, owner));

@@ -78,8 +78,8 @@ class RoomControllerTest {
 	}
 
 	@Test
-	@DisplayName("POST /api/rooms creates a room and automatically registers the owner as a member")
-	void createRoomCreatesOwnerMembership() throws Exception {
+	@DisplayName("POST /api/rooms 요청은 방을 생성하고 소유자를 멤버로 자동 등록한다")
+	void 방_생성은_소유자를_멤버로_자동_등록한다() throws Exception {
 		User owner = createUser("owner@example.com", "owner");
 
 		MvcResult result = mockMvc
@@ -103,8 +103,8 @@ class RoomControllerTest {
 	}
 
 	@Test
-	@DisplayName("GET /api/rooms/{roomId}/members returns forbidden for non-members")
-	void getMembersRequiresRoomMembership() throws Exception {
+	@DisplayName("GET /api/rooms/{roomId}/members 요청은 방 멤버가 아니면 403을 반환한다")
+	void 멤버_조회는_방_멤버가_아니면_403을_반환한다() throws Exception {
 		User owner = createUser("owner@example.com", "owner");
 		User stranger = createUser("stranger@example.com", "stranger");
 		Room room = roomRepository.save(Room.create("Capstone Team", owner));
@@ -122,8 +122,8 @@ class RoomControllerTest {
 	}
 
 	@Test
-	@DisplayName("POST /api/rooms/{roomId}/invite-token reissues a new token and invalidates the previous token")
-	void issueInviteTokenReissuesToken() throws Exception {
+	@DisplayName("POST /api/rooms/{roomId}/invite-token 요청은 새 토큰을 발급하고 기존 토큰을 무효화한다")
+	void 초대_토큰_재발급은_새_토큰을_발급하고_기존_토큰을_무효화한다() throws Exception {
 		User owner = createUser("owner@example.com", "owner");
 		User invitedUser = createUser("guest@example.com", "guest");
 		Room room = roomRepository.save(Room.create("Capstone Team", owner));
@@ -169,8 +169,8 @@ class RoomControllerTest {
 	}
 
 	@Test
-	@DisplayName("POST /api/rooms/join allows multiple users to join with the same token")
-	void joinRoomSupportsMultiUseToken() throws Exception {
+	@DisplayName("POST /api/rooms/join 요청은 같은 토큰으로 여러 사용자의 참여를 허용한다")
+	void 같은_초대_토큰으로_여러_사용자가_참여할_수_있다() throws Exception {
 		User owner = createUser("owner@example.com", "owner");
 		User guestOne = createUser("guest1@example.com", "guest1");
 		User guestTwo = createUser("guest2@example.com", "guest2");
@@ -214,8 +214,8 @@ class RoomControllerTest {
 	}
 
 	@Test
-	@DisplayName("POST /api/rooms/join rejects expired invite tokens")
-	void joinRoomRejectsExpiredToken() throws Exception {
+	@DisplayName("POST /api/rooms/join 요청은 만료된 초대 토큰을 거부한다")
+	void 만료된_초대_토큰은_방_참여를_거부한다() throws Exception {
 		User owner = createUser("owner@example.com", "owner");
 		User guest = createUser("guest@example.com", "guest");
 		Room room = roomRepository.save(Room.create("Capstone Team", owner));

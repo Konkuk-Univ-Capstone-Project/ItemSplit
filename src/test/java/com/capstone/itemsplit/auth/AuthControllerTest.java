@@ -73,8 +73,8 @@ class AuthControllerTest {
 	}
 
 	@Test
-	@DisplayName("POST /api/auth/signup creates a new user with a BCrypt password")
-	void signupCreatesUser() throws Exception {
+	@DisplayName("POST /api/auth/signup 요청은 BCrypt 비밀번호로 새 사용자를 생성한다")
+	void 회원가입_요청은_BCrypt_비밀번호로_사용자를_생성한다() throws Exception {
 		mockMvc
 			.perform(
 				post("/api/auth/signup")
@@ -98,8 +98,8 @@ class AuthControllerTest {
 	}
 
 	@Test
-	@DisplayName("POST /api/auth/signup returns validation error when email is duplicated")
-	void signupFailsWhenEmailAlreadyExists() throws Exception {
+	@DisplayName("POST /api/auth/signup 요청은 이메일이 중복되면 검증 오류를 반환한다")
+	void 중복_이메일_회원가입은_검증_오류를_반환한다() throws Exception {
 		userRepository.save(User.create(
 			"user@example.com",
 			passwordEncoder.encode("password123"),
@@ -125,8 +125,8 @@ class AuthControllerTest {
 	}
 
 	@Test
-	@DisplayName("POST /api/auth/login returns an access token for valid credentials")
-	void loginReturnsAccessToken() throws Exception {
+	@DisplayName("POST /api/auth/login 요청은 올바른 인증 정보에 액세스 토큰을 반환한다")
+	void 올바른_로그인_요청은_액세스_토큰을_반환한다() throws Exception {
 		userRepository.save(User.create(
 			"user@example.com",
 			passwordEncoder.encode("password123"),
@@ -152,8 +152,8 @@ class AuthControllerTest {
 	}
 
 	@Test
-	@DisplayName("POST /api/auth/login returns unauthorized for invalid credentials")
-	void loginFailsForInvalidCredentials() throws Exception {
+	@DisplayName("POST /api/auth/login 요청은 잘못된 인증 정보에 401을 반환한다")
+	void 잘못된_로그인_요청은_인증_실패를_반환한다() throws Exception {
 		userRepository.save(User.create(
 			"user@example.com",
 			passwordEncoder.encode("password123"),
@@ -178,8 +178,8 @@ class AuthControllerTest {
 	}
 
 	@Test
-	@DisplayName("GET /api/auth/me returns unauthorized when the access token is missing")
-	void meRequiresAuthentication() throws Exception {
+	@DisplayName("GET /api/auth/me 요청은 액세스 토큰이 없으면 401을 반환한다")
+	void 내_정보_조회는_토큰이_없으면_인증_실패를_반환한다() throws Exception {
 		mockMvc
 			.perform(get("/api/auth/me"))
 			.andExpect(status().isUnauthorized())
@@ -188,8 +188,8 @@ class AuthControllerTest {
 	}
 
 	@Test
-	@DisplayName("GET /api/auth/me returns the authenticated user for a valid access token")
-	void meReturnsAuthenticatedUser() throws Exception {
+	@DisplayName("GET /api/auth/me 요청은 유효한 액세스 토큰의 사용자를 반환한다")
+	void 내_정보_조회는_유효한_토큰의_사용자를_반환한다() throws Exception {
 		User user = userRepository.save(User.create(
 			"user@example.com",
 			passwordEncoder.encode("password123"),
