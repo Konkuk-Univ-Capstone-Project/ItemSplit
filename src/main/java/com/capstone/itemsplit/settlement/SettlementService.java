@@ -33,7 +33,15 @@ public class SettlementService {
 
 	public SettlementResult calculate(Long roomId, Long userId) {
 		Room room = roomAuthorizationService.checkMember(roomId, userId);
+		return calculateAuthorized(room);
+	}
 
+	public SettlementResult calculateShared(Room room) {
+		return calculateAuthorized(room);
+	}
+
+	private SettlementResult calculateAuthorized(Room room) {
+		Long roomId = room.getId();
 		List<RoomMember> members = roomMemberRepository.findAllByRoomId(roomId);
 		List<Receipt> receipts = receiptRepository.findAllByRoomId(roomId);
 

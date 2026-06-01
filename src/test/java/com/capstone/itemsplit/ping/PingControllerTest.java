@@ -2,6 +2,7 @@ package com.capstone.itemsplit.ping;
 
 import com.capstone.itemsplit.auth.JwtAuthenticationFilter;
 import com.capstone.itemsplit.common.exception.GlobalExceptionHandler;
+import com.capstone.itemsplit.common.ratelimit.RateLimitProperties;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -27,6 +28,9 @@ class PingControllerTest {
 
 	@MockitoBean
 	private JwtAuthenticationFilter jwtAuthenticationFilter;
+
+	@MockitoBean
+	private RateLimitProperties rateLimitProperties;
 
 	@Test
 	@DisplayName("GET /api/ping 요청은 통합 성공 응답 형식을 반환한다")
@@ -58,6 +62,21 @@ class PingControllerTest {
 			.andExpect(jsonPath("$.error.code").value("VALIDATION_ERROR"))
 			.andExpect(jsonPath("$.error.details[0].field").value("message"))
 			.andExpect(jsonPath("$.error.details[0].reason").value("message must not be blank"));
+	}
+
+	@Test
+	@DisplayName("잘못된 JSON 요청은 VALIDATION_ERROR 응답으로 변환된다")
+	void 잘못된_JSON_요청은_VALIDATION_ERROR_응답으로_변환된다() throws Exception {
+		mockMvc
+			.perform(
+				post("/api/ping/echo")
+					.contentType(MediaType.APPLICATION_JSON)
+					.content("{")
+			)
+			.andExpect(status().isBadRequest())
+			.andExpect(jsonPath("$.success").value(false))
+			.andExpect(jsonPath("$.error.code").value("VALIDATION_ERROR"))
+			.andExpect(jsonPath("$.error.message").value("Request body is missing or malformed."));
 	}
 
 	@Test

@@ -6,12 +6,16 @@ import jakarta.validation.ValidationException;
 import java.util.List;
 import java.util.NoSuchElementException;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.validation.FieldError;
+import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.multipart.support.MissingServletRequestPartException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 @RestControllerAdvice
@@ -48,6 +52,49 @@ public class GlobalExceptionHandler {
 	@ExceptionHandler(ValidationException.class)
 	public ResponseEntity<ApiResponse<Void>> handleValidationException(ValidationException exception) {
 		return buildErrorResponse(ErrorCode.VALIDATION_ERROR, exception.getMessage(), List.of());
+	}
+
+	@ExceptionHandler(HttpMessageNotReadableException.class)
+	public ResponseEntity<ApiResponse<Void>> handleHttpMessageNotReadableException(
+		HttpMessageNotReadableException exception
+	) {
+		return buildErrorResponse(ErrorCode.VALIDATION_ERROR, "Request body is missing or malformed.", List.of());
+	}
+
+	@ExceptionHandler(MissingServletRequestParameterException.class)
+	public ResponseEntity<ApiResponse<Void>> handleMissingServletRequestParameterException(
+		MissingServletRequestParameterException exception
+	) {
+		List<ErrorResponse.FieldErrorDetail> details = List.of(new ErrorResponse.FieldErrorDetail(
+			exception.getParameterName(),
+			null,
+			"required request parameter is missing"
+		));
+		return buildErrorResponse(ErrorCode.VALIDATION_ERROR, ErrorCode.VALIDATION_ERROR.getMessage(), details);
+	}
+
+	@ExceptionHandler(MissingServletRequestPartException.class)
+	public ResponseEntity<ApiResponse<Void>> handleMissingServletRequestPartException(
+		MissingServletRequestPartException exception
+	) {
+		List<ErrorResponse.FieldErrorDetail> details = List.of(new ErrorResponse.FieldErrorDetail(
+			exception.getRequestPartName(),
+			null,
+			"required multipart part is missing"
+		));
+		return buildErrorResponse(ErrorCode.VALIDATION_ERROR, ErrorCode.VALIDATION_ERROR.getMessage(), details);
+	}
+
+	@ExceptionHandler(MethodArgumentTypeMismatchException.class)
+	public ResponseEntity<ApiResponse<Void>> handleMethodArgumentTypeMismatchException(
+		MethodArgumentTypeMismatchException exception
+	) {
+		List<ErrorResponse.FieldErrorDetail> details = List.of(new ErrorResponse.FieldErrorDetail(
+			exception.getName(),
+			exception.getValue() == null ? null : String.valueOf(exception.getValue()),
+			"request value type is invalid"
+		));
+		return buildErrorResponse(ErrorCode.VALIDATION_ERROR, ErrorCode.VALIDATION_ERROR.getMessage(), details);
 	}
 
 	@ExceptionHandler(AuthenticationException.class)

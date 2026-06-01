@@ -76,6 +76,29 @@ curl.exe http://localhost:8080/actuator/health
 
 운영 프로파일은 `ddl-auto=validate`로 동작합니다.
 
+## 데모 Docker 실행
+
+DB만 실행할 때는 기존처럼 아래 명령을 사용합니다.
+
+```bash
+docker compose up -d postgres
+```
+
+API까지 함께 띄우는 데모 환경은 `demo` profile을 사용합니다.
+
+```bash
+docker compose --profile demo up -d --build
+```
+
+기본 API 포트는 `8080`입니다. 필요하면 `.env`에 `APP_PORT=18080`처럼 지정할 수 있습니다.
+
+## 운영 기본값
+
+- 모든 `/api/**` 요청에는 기본 레이트리밋이 적용됩니다.
+- 기본값은 `60초 동안 IP당 120회`입니다.
+- 조정 환경 변수: `RATE_LIMIT_ENABLED`, `RATE_LIMIT_CAPACITY`, `RATE_LIMIT_WINDOW_SECONDS`
+- 제한 초과 시 `429 TOO_MANY_REQUESTS`와 공통 에러 응답 포맷이 반환됩니다.
+
 ## Assignment API
 
 Sprint 3 기준으로 item assignees 조회와 전체 교체 API가 준비되어 있습니다.
@@ -181,3 +204,28 @@ Content-Type: application/json
 - `MANUAL`: 텍스트로 receipt와 item 목록을 직접 입력해 만든 receipt
 
 정산, assignment, room 권한 로직은 두 타입 모두 동일한 `Receipt -> Item -> Room` 구조를 기준으로 동작합니다.
+
+## Shared Read-only API
+
+방 멤버는 정산 결과 공유용 읽기 전용 토큰을 발급할 수 있습니다.
+
+### 1. 공유 토큰 발급/재발급
+
+```http
+POST /api/rooms/{roomId}/share-token
+Authorization: Bearer {accessToken}
+```
+
+- 요청자는 해당 room의 멤버여야 합니다.
+- 호출할 때마다 새 토큰으로 교체되며, 이전 공유 토큰은 더 이상 사용할 수 없습니다.
+- 기본 만료 기간은 14일입니다.
+
+### 2. 공유 정산 조회
+
+```http
+GET /api/shared/rooms/{token}/settlements
+```
+
+- 인증 없이 조회할 수 있습니다.
+- 쓰기 API는 공유 토큰으로 호출할 수 없습니다.
+- 응답에는 `readOnly=true`, `shareExpiresAt`, 정산 멤버 목록이 포함됩니다.

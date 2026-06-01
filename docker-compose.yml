@@ -1,4 +1,31 @@
 services:
+  app:
+    profiles: ["demo"]
+    build: .
+    container_name: itemsplit-api
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-local}
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: ${DB_NAME:-itemsplit}
+      DB_USER: ${DB_USER:-itemsplit}
+      DB_PASSWORD: ${DB_PASSWORD:-itemsplit}
+      DB_URL: jdbc:postgresql://postgres:5432/${DB_NAME:-itemsplit}
+      JWT_SECRET: ${JWT_SECRET:-change-me-to-a-long-random-secret}
+      JWT_ACCESS_TOKEN_EXPIRATION: ${JWT_ACCESS_TOKEN_EXPIRATION:-86400000}
+      LOCAL_STORAGE_ROOT: /app/storage
+      RATE_LIMIT_ENABLED: ${RATE_LIMIT_ENABLED:-true}
+      RATE_LIMIT_CAPACITY: ${RATE_LIMIT_CAPACITY:-120}
+      RATE_LIMIT_WINDOW_SECONDS: ${RATE_LIMIT_WINDOW_SECONDS:-60}
+    ports:
+      - "${APP_PORT:-8080}:8080"
+    volumes:
+      - itemsplit-storage:/app/storage
+
   postgres:
     image: postgres:16-alpine
     container_name: itemsplit-postgres
@@ -20,3 +47,4 @@ services:
 
 volumes:
   itemsplit-postgres-data:
+  itemsplit-storage:
