@@ -25,6 +25,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class RoomController {
 
 	private final RoomService roomService;
+	private final RoomShareService roomShareService;
 
 	@PostMapping
 	public ResponseEntity<ApiResponse<CreateRoomResponse>> createRoom(
@@ -81,6 +82,23 @@ public class RoomController {
 		));
 	}
 
+	@PostMapping("/{roomId}/share-token")
+	public ApiResponse<ShareTokenResponse> issueShareToken(
+		@PathVariable Long roomId,
+		@AuthenticationPrincipal AuthenticatedUser authenticatedUser
+	) {
+		Long userId = requireAuthenticatedUser(authenticatedUser);
+		RoomShareService.ShareTokenResult result = roomShareService.issueShareToken(roomId, userId);
+
+		return ApiResponse.success(new ShareTokenResponse(
+			result.roomId(),
+			result.roomName(),
+			result.token(),
+			result.expiresAt(),
+			result.readOnly()
+		));
+	}
+
 	@PostMapping("/join")
 	public ApiResponse<JoinRoomResponse> joinRoom(
 		@RequestParam String token,
@@ -125,6 +143,15 @@ public class RoomController {
 		String roomName,
 		String token,
 		java.time.LocalDateTime expiresAt
+	) {
+	}
+
+	public record ShareTokenResponse(
+		Long roomId,
+		String roomName,
+		String token,
+		java.time.LocalDateTime expiresAt,
+		boolean readOnly
 	) {
 	}
 

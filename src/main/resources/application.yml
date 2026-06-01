@@ -27,3 +27,7 @@ app:
   storage:
     local:
       root-path: ${LOCAL_STORAGE_ROOT:./storage}
+  rate-limit:
+    enabled: ${RATE_LIMIT_ENABLED:true}
+    capacity: ${RATE_LIMIT_CAPACITY:120}
+    window-seconds: ${RATE_LIMIT_WINDOW_SECONDS:60}

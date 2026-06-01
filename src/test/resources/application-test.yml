@@ -9,6 +9,8 @@ spring:
       ddl-auto: create-drop
 
 app:
+  rate-limit:
+    enabled: false
   storage:
     local:
       root-path: ./build/test-storage
