@@ -229,3 +229,51 @@ GET /api/shared/rooms/{token}/settlements
 - 인증 없이 조회할 수 있습니다.
 - 쓰기 API는 공유 토큰으로 호출할 수 없습니다.
 - 응답에는 `readOnly=true`, `shareExpiresAt`, 정산 멤버 목록이 포함됩니다.
+
+## Settlement API
+
+### 1. 정산 결과 조회
+
+```http
+GET /api/rooms/{roomId}/settlements
+Authorization: Bearer {accessToken}
+```
+
+- 요청자는 해당 room의 멤버여야 합니다.
+- 정산 결과는 DB에 저장하지 않고 요청마다 on-demand로 계산합니다.
+
+### 2. 계산 규칙
+
+- **부담액(burden)**: 각 item을 배정된 멤버 수로 N등분. 1원 단위 나머지는 `roomId + itemId` 시드 기반 seeded random으로 참여자 중 1명에게 귀속 (조회 시마다 동일한 결과 보장).
+- **지불액(paid)**: receipt의 `payer`가 실제로 낸 금액 (배정된 item 합산).
+- **net**: `paid - burden`. 양수면 받아야 할 금액, 음수면 내야 할 금액.
+- Assignment가 없는 item은 정산에서 제외됩니다.
+
+### 3. 성공 응답 예시
+
+```json
+{
+  "success": true,
+  "data": {
+    "roomId": 1,
+    "roomName": "팀 회식",
+    "members": [
+      {
+        "userId": 1,
+        "nickname": "Alice",
+        "burden": 15000,
+        "paid": 30000,
+        "net": 15000
+      },
+      {
+        "userId": 2,
+        "nickname": "Bob",
+        "burden": 15000,
+        "paid": 0,
+        "net": -15000
+      }
+    ]
+  },
+  "error": null
+}
+```

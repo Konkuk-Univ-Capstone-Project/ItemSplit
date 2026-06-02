@@ -10,6 +10,8 @@ import com.capstone.itemsplit.room.Room;
 import com.capstone.itemsplit.room.RoomMember;
 import com.capstone.itemsplit.room.RoomMemberRepository;
 import com.capstone.itemsplit.room.RoomAuthorizationService;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -96,11 +98,13 @@ public class SettlementService {
 				burden.merge(memberId, perPerson, Long::sum);
 			}
 
-			// 나머지는 품목 참여자 중 seeded random으로 선택 (roomId+itemId 시드 → 조회마다 동일)
+			// 나머지 r원을 r명에게 1원씩 분산 (seeded random → 조회마다 동일)
 			if (remainder > 0) {
-				int pickedIndex = new Random(roomId * 1_000_003L + item.getId()).nextInt(count);
-				long pickedId = itemAssignments.get(pickedIndex).getUser().getId();
-				burden.merge(pickedId, remainder, Long::sum);
+				List<Assignment> shuffled = new ArrayList<>(itemAssignments);
+				Collections.shuffle(shuffled, new Random(roomId * 1_000_003L + item.getId()));
+				for (int i = 0; i < remainder; i++) {
+					burden.merge(shuffled.get(i).getUser().getId(), 1L, Long::sum);
+				}
 			}
 		}
 
