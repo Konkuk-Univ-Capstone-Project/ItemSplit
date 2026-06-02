@@ -33,7 +33,7 @@ public class AssignmentService {
 
 	public AssigneesResult getAssignees(Long roomId, Long receiptId, Long itemId, Long requesterId) {
 		Item item = validateRequestScope(roomId, receiptId, itemId, requesterId);
-		return AssigneesResult.from(item, assignmentRepository.findAllByItemId(itemId));
+		return AssigneesResult.from(roomId, receiptId, item, assignmentRepository.findAllByItemId(itemId));
 	}
 
 	@Transactional
@@ -76,19 +76,19 @@ public class AssignmentService {
 			assignmentRepository.saveAll(assignments);
 		}
 
-		return AssigneesResult.from(item, assignmentRepository.findAllByItemId(itemId));
+		return AssigneesResult.from(roomId, receiptId, item, assignmentRepository.findAllByItemId(itemId));
 	}
 
 	private Item validateRequestScope(Long roomId, Long receiptId, Long itemId, Long requesterId) {
 		roomAuthorizationService.checkMember(roomId, requesterId);
 
-		Receipt receipt = receiptRepository.findById(receiptId)
+		Receipt receipt = receiptRepository.findByIdWithRoom(receiptId)
 			.orElseThrow(() -> new ApiException(ErrorCode.NOT_FOUND, "Receipt was not found."));
 		if (!receipt.getRoom().getId().equals(roomId)) {
 			throw new ApiException(ErrorCode.NOT_FOUND, "Receipt was not found in this room.");
 		}
 
-		Item item = itemRepository.findById(itemId)
+		Item item = itemRepository.findByIdWithReceipt(itemId)
 			.orElseThrow(() -> new ApiException(ErrorCode.NOT_FOUND, "Item was not found."));
 		if (!item.getReceipt().getId().equals(receiptId)) {
 			throw new ApiException(ErrorCode.NOT_FOUND, "Item was not found in this receipt.");
@@ -98,8 +98,8 @@ public class AssignmentService {
 	}
 
 	private void validateUsersExist(LinkedHashSet<Long> memberIds) {
-		List<User> users = userRepository.findAllById(memberIds);
-		if (users.size() != memberIds.size()) {
+		long count = userRepository.countByIdIn(memberIds);
+		if (count != memberIds.size()) {
 			throw new ApiException(ErrorCode.NOT_FOUND, "One or more members were not found.");
 		}
 	}
@@ -112,10 +112,10 @@ public class AssignmentService {
 		List<AssigneeInfo> assignees
 	) {
 
-		private static AssigneesResult from(Item item, List<Assignment> assignments) {
+		private static AssigneesResult from(Long roomId, Long receiptId, Item item, List<Assignment> assignments) {
 			return new AssigneesResult(
-				item.getReceipt().getRoom().getId(),
-				item.getReceipt().getId(),
+				roomId,
+				receiptId,
 				item.getId(),
 				item.getName(),
 				assignments.stream()
