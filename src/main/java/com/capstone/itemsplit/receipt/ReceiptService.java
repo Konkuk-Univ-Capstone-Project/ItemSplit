@@ -140,12 +140,8 @@ public class ReceiptService {
 	}
 
 	private Receipt findReceiptInRoom(Long roomId, Long receiptId) {
-		Receipt receipt = receiptRepository.findById(receiptId)
+		return receiptRepository.findByIdAndRoomId(receiptId, roomId)
 			.orElseThrow(() -> new ApiException(ErrorCode.NOT_FOUND, "Receipt was not found."));
-		if (!receipt.getRoom().getId().equals(roomId)) {
-			throw new ApiException(ErrorCode.NOT_FOUND, "Receipt was not found in this room.");
-		}
-		return receipt;
 	}
 
 	private User resolvePayer(Long roomId, Long payerId) {
