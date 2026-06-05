@@ -1,13 +1,13 @@
 package com.capstone.itemsplit.assignment;
 
 import com.capstone.itemsplit.item.Item;
-import com.capstone.itemsplit.user.User;
+import com.capstone.itemsplit.room.RoomMember;
 import jakarta.persistence.*;
 import lombok.*;
 
 @Entity
 @Table(name = "assignments",
-        uniqueConstraints = @UniqueConstraint(columnNames = {"item_id", "user_id"}))
+        uniqueConstraints = @UniqueConstraint(columnNames = {"item_id", "room_member_id"}))
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class Assignment {
@@ -21,15 +21,15 @@ public class Assignment {
     private Item item;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "user_id", nullable = false)
-    private User user;
+    @JoinColumn(name = "room_member_id")
+    private RoomMember roomMember;
 
-    private Assignment(Item item, User user) {
+    private Assignment(Item item, RoomMember roomMember) {
         this.item = item;
-        this.user = user;
+        this.roomMember = roomMember;
     }
 
-    public static Assignment create(Item item, User user) {
-        return new Assignment(item, user);
+    public static Assignment create(Item item, RoomMember roomMember) {
+        return new Assignment(item, roomMember);
     }
 }

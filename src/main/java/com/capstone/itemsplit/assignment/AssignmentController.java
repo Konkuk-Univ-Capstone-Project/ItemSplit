@@ -69,9 +69,11 @@ public class AssignmentController {
 			result.itemName(),
 			result.assignees().stream()
 				.map(assignee -> new AssigneeResponse(
+					assignee.memberId(),
 					assignee.userId(),
 					assignee.email(),
-					assignee.nickname()
+					assignee.nickname(),
+					assignee.linked()
 				))
 				.toList()
 		);
@@ -100,7 +102,7 @@ public class AssignmentController {
 	) {
 	}
 
-	public record AssigneeResponse(Long userId, String email, String nickname) {
+	public record AssigneeResponse(Long memberId, Long userId, String email, String nickname, boolean linked) {
 	}
 
 }

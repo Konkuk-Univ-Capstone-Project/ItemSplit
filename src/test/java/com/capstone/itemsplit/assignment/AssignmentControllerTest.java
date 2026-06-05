@@ -167,6 +167,32 @@ class AssignmentControllerTest {
 	}
 
 	@Test
+	@DisplayName("PUT assignees 요청은 수동 멤버를 담당자로 지정할 수 있다")
+	void 수동_멤버를_담당자로_지정할_수_있다() throws Exception {
+		User owner = createUser("owner@example.com", "owner");
+		ItemFixture fixture = createItemFixture("Capstone Team", "Dinner", "Pasta", owner);
+		RoomMember manualMember = roomMemberRepository.save(RoomMember.createManual(fixture.room(), "민지"));
+
+		mockMvc
+			.perform(
+				putAssignees(fixture.room().getId(), fixture.receipt().getId(), fixture.item().getId(), owner,
+					"""
+						{
+						  "memberIds": [%d]
+						}
+						""".formatted(manualMember.getId()))
+			)
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.success").value(true))
+			.andExpect(jsonPath("$.data.assignees[0].memberId").value(manualMember.getId()))
+			.andExpect(jsonPath("$.data.assignees[0].userId").doesNotExist())
+			.andExpect(jsonPath("$.data.assignees[0].nickname").value("민지"))
+			.andExpect(jsonPath("$.data.assignees[0].linked").value(false));
+
+		assertThat(assignmentRepository.findAllByItemId(fixture.item().getId())).hasSize(1);
+	}
+
+	@Test
 	@DisplayName("GET assignees 요청은 인증이 없으면 401을 반환한다")
 	void 담당자_조회는_인증이_없으면_401을_반환한다() throws Exception {
 		User owner = createUser("owner@example.com", "owner");

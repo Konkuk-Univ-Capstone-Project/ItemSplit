@@ -32,8 +32,10 @@ public class SettlementController {
 	private SettlementResponse toResponse(SettlementService.SettlementResult result) {
 		List<MemberSettlementResponse> members = result.members().stream()
 			.map(m -> new MemberSettlementResponse(
+				m.memberId(),
 				m.userId(),
 				m.nickname(),
+				m.linked(),
 				m.burden(),
 				m.paid(),
 				m.net()
@@ -57,8 +59,10 @@ public class SettlementController {
 	}
 
 	public record MemberSettlementResponse(
+		Long memberId,
 		Long userId,
 		String nickname,
+		boolean linked,
 		long burden,
 		long paid,
 		long net

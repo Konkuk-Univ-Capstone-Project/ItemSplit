@@ -25,8 +25,10 @@ public class SharedRoomController {
 
 		List<MemberSettlementResponse> members = settlement.members().stream()
 			.map(member -> new MemberSettlementResponse(
+				member.memberId(),
 				member.userId(),
 				member.nickname(),
+				member.linked(),
 				member.burden(),
 				member.paid(),
 				member.net()
@@ -52,8 +54,10 @@ public class SharedRoomController {
 	}
 
 	public record MemberSettlementResponse(
+		Long memberId,
 		Long userId,
 		String nickname,
+		boolean linked,
 		long burden,
 		long paid,
 		long net

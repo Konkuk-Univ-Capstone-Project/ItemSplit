@@ -76,18 +76,18 @@ class SettlementControllerTest {
 		User owner = createUser("owner@test.com", "owner");
 		User member = createUser("member@test.com", "member");
 		Room room = roomRepository.save(Room.create("dinner", owner));
-		roomMemberRepository.save(RoomMember.create(room, owner));
-		roomMemberRepository.save(RoomMember.create(room, member));
+		RoomMember ownerMember = roomMemberRepository.save(RoomMember.create(room, owner));
+		RoomMember memberMember = roomMemberRepository.save(RoomMember.create(room, member));
 
-		Receipt receipt = receiptRepository.save(Receipt.createManual(room, "저녁식사", owner, null, null));
+		Receipt receipt = receiptRepository.save(Receipt.createManual(room, "저녁식사", ownerMember, null, null));
 		// 삼겹살 30000원 — owner, member 둘 다 참여 → 각 15000
 		Item pork = itemRepository.save(Item.create(receipt, "삼겹살", 30000, 1));
 		// 소주 15000원 — owner만 참여 → owner 15000
 		Item soju = itemRepository.save(Item.create(receipt, "소주", 15000, 1));
 
-		assignmentRepository.save(Assignment.create(pork, owner));
-		assignmentRepository.save(Assignment.create(pork, member));
-		assignmentRepository.save(Assignment.create(soju, owner));
+		assignmentRepository.save(Assignment.create(pork, ownerMember));
+		assignmentRepository.save(Assignment.create(pork, memberMember));
+		assignmentRepository.save(Assignment.create(soju, ownerMember));
 
 		mockMvc.perform(get("/api/rooms/{roomId}/settlements", room.getId())
 				.header(HttpHeaders.AUTHORIZATION, bearer(owner)))
@@ -103,14 +103,14 @@ class SettlementControllerTest {
 		User owner = createUser("owner@test.com", "owner");
 		User member = createUser("member@test.com", "member");
 		Room room = roomRepository.save(Room.create("dinner", owner));
-		roomMemberRepository.save(RoomMember.create(room, owner));
-		roomMemberRepository.save(RoomMember.create(room, member));
+		RoomMember ownerMember = roomMemberRepository.save(RoomMember.create(room, owner));
+		RoomMember memberMember = roomMemberRepository.save(RoomMember.create(room, member));
 
 		// owner가 결제자, 10000원 품목을 둘이 N빵
-		Receipt receipt = receiptRepository.save(Receipt.createManual(room, "카페", owner, null, null));
+		Receipt receipt = receiptRepository.save(Receipt.createManual(room, "카페", ownerMember, null, null));
 		Item coffee = itemRepository.save(Item.create(receipt, "아메리카노", 10000, 1));
-		assignmentRepository.save(Assignment.create(coffee, owner));
-		assignmentRepository.save(Assignment.create(coffee, member));
+		assignmentRepository.save(Assignment.create(coffee, ownerMember));
+		assignmentRepository.save(Assignment.create(coffee, memberMember));
 
 		mockMvc.perform(get("/api/rooms/{roomId}/settlements", room.getId())
 				.header(HttpHeaders.AUTHORIZATION, bearer(owner)))
@@ -129,7 +129,7 @@ class SettlementControllerTest {
 	void 배정_없는_품목은_정산에서_제외된다() throws Exception {
 		User owner = createUser("owner@test.com", "owner");
 		Room room = roomRepository.save(Room.create("room", owner));
-		roomMemberRepository.save(RoomMember.create(room, owner));
+		RoomMember ownerMember = roomMemberRepository.save(RoomMember.create(room, owner));
 
 		Receipt receipt = receiptRepository.save(Receipt.createManual(room, "카페", null, null, null));
 		itemRepository.save(Item.create(receipt, "아메리카노", 5000, 1)); // 배정 없음
@@ -145,11 +145,11 @@ class SettlementControllerTest {
 	void 참여자가_한_명인_품목은_전액_그_사람이_부담한다() throws Exception {
 		User owner = createUser("owner@test.com", "owner");
 		Room room = roomRepository.save(Room.create("room", owner));
-		roomMemberRepository.save(RoomMember.create(room, owner));
+		RoomMember ownerMember = roomMemberRepository.save(RoomMember.create(room, owner));
 
 		Receipt receipt = receiptRepository.save(Receipt.createManual(room, "카페", null, null, null));
 		Item item = itemRepository.save(Item.create(receipt, "아메리카노", 4500, 1));
-		assignmentRepository.save(Assignment.create(item, owner));
+		assignmentRepository.save(Assignment.create(item, ownerMember));
 
 		mockMvc.perform(get("/api/rooms/{roomId}/settlements", room.getId())
 				.header(HttpHeaders.AUTHORIZATION, bearer(owner)))
@@ -164,16 +164,16 @@ class SettlementControllerTest {
 		User a = createUser("a@test.com", "a");
 		User b = createUser("b@test.com", "b");
 		Room room = roomRepository.save(Room.create("room", owner));
-		roomMemberRepository.save(RoomMember.create(room, owner));
-		roomMemberRepository.save(RoomMember.create(room, a));
-		roomMemberRepository.save(RoomMember.create(room, b));
+		RoomMember ownerMember = roomMemberRepository.save(RoomMember.create(room, owner));
+		RoomMember aMember = roomMemberRepository.save(RoomMember.create(room, a));
+		RoomMember bMember = roomMemberRepository.save(RoomMember.create(room, b));
 
 		// 10000원을 3명이 나누면 3333 * 3 = 9999, 나머지 1원은 seeded random으로 참여자 중 1명에게
 		Receipt receipt = receiptRepository.save(Receipt.createManual(room, "식사", null, null, null));
 		Item item = itemRepository.save(Item.create(receipt, "찌개", 10000, 1));
-		assignmentRepository.save(Assignment.create(item, owner));
-		assignmentRepository.save(Assignment.create(item, a));
-		assignmentRepository.save(Assignment.create(item, b));
+		assignmentRepository.save(Assignment.create(item, ownerMember));
+		assignmentRepository.save(Assignment.create(item, aMember));
+		assignmentRepository.save(Assignment.create(item, bMember));
 
 		mockMvc.perform(get("/api/rooms/{roomId}/settlements", room.getId())
 				.header(HttpHeaders.AUTHORIZATION, bearer(owner)))

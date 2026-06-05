@@ -197,10 +197,12 @@ class RoomShareControllerTest {
 	}
 
 	private void createSettlementFixture(Room room, User owner, User member) {
-		Receipt receipt = receiptRepository.save(Receipt.createManual(room, "Cafe", owner, null, null));
+		RoomMember ownerMember = roomMemberRepository.findByRoomIdAndUserId(room.getId(), owner.getId()).orElseThrow();
+		RoomMember memberMember = roomMemberRepository.findByRoomIdAndUserId(room.getId(), member.getId()).orElseThrow();
+		Receipt receipt = receiptRepository.save(Receipt.createManual(room, "Cafe", ownerMember, null, null));
 		Item coffee = itemRepository.save(Item.create(receipt, "Coffee", 10000, 1));
-		assignmentRepository.save(Assignment.create(coffee, owner));
-		assignmentRepository.save(Assignment.create(coffee, member));
+		assignmentRepository.save(Assignment.create(coffee, ownerMember));
+		assignmentRepository.save(Assignment.create(coffee, memberMember));
 	}
 
 	private Room createRoomWithMember(User owner) {
