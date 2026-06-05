@@ -76,7 +76,7 @@ public class SettlementService {
 		// 멤버별 부담액
 		Map<Long, Long> burden = new HashMap<>();
 		for (RoomMember member : members) {
-			burden.put(member.getUser().getId(), 0L);
+			burden.put(member.getId(), 0L);
 		}
 
 		// 결제자별 지불액
@@ -94,7 +94,7 @@ public class SettlementService {
 			long remainder = total % count;
 
 			for (Assignment assignment : itemAssignments) {
-				long memberId = assignment.getUser().getId();
+				long memberId = assignment.getRoomMember().getId();
 				burden.merge(memberId, perPerson, Long::sum);
 			}
 
@@ -103,7 +103,7 @@ public class SettlementService {
 				List<Assignment> shuffled = new ArrayList<>(itemAssignments);
 				Collections.shuffle(shuffled, new Random(roomId * 1_000_003L + item.getId()));
 				for (int i = 0; i < remainder; i++) {
-					burden.merge(shuffled.get(i).getUser().getId(), 1L, Long::sum);
+					burden.merge(shuffled.get(i).getRoomMember().getId(), 1L, Long::sum);
 				}
 			}
 		}
@@ -118,19 +118,20 @@ public class SettlementService {
 			if (receipt.getPayer() == null) {
 				continue;
 			}
-			long payerId = receipt.getPayer().getId();
 			long total = (long) item.getPrice() * item.getQuantity();
-			paid.merge(payerId, total, Long::sum);
+			paid.merge(receipt.getPayer().getId(), total, Long::sum);
 		}
 
 		List<MemberSettlement> memberSettlements = members.stream()
 			.map(member -> {
-				long memberId = member.getUser().getId();
+				long memberId = member.getId();
 				long memberBurden = burden.getOrDefault(memberId, 0L);
 				long memberPaid = paid.getOrDefault(memberId, 0L);
 				return new MemberSettlement(
 					memberId,
-					member.getUser().getNickname(),
+					member.isLinkedUser() ? member.getUser().getId() : null,
+					member.getDisplayName(),
+					member.isLinkedUser(),
 					memberBurden,
 					memberPaid,
 					memberPaid - memberBurden
@@ -149,8 +150,10 @@ public class SettlementService {
 		static SettlementResult empty(Room room, List<RoomMember> members) {
 			List<MemberSettlement> memberSettlements = members.stream()
 				.map(m -> new MemberSettlement(
-					m.getUser().getId(),
-					m.getUser().getNickname(),
+					m.getId(),
+					m.isLinkedUser() ? m.getUser().getId() : null,
+					m.getDisplayName(),
+					m.isLinkedUser(),
 					0L, 0L, 0L
 				))
 				.toList();
@@ -159,8 +162,10 @@ public class SettlementService {
 	}
 
 	public record MemberSettlement(
+		Long memberId,
 		Long userId,
 		String nickname,
+		boolean linked,
 		long burden,    // 이 멤버가 부담해야 할 금액
 		long paid,      // 이 멤버가 결제자로서 낸 금액
 		long net        // 양수: 받아야 할 금액, 음수: 내야 할 금액

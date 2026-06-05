@@ -137,7 +137,7 @@ class ReceiptCrudControllerTest {
 	void 영수증_수정은_이름과_결제자를_변경한다() throws Exception {
 		User owner = createUser("owner@example.com", "owner");
 		Room room = roomRepository.save(Room.create("Capstone Team", owner));
-		roomMemberRepository.save(RoomMember.create(room, owner));
+		RoomMember ownerMember = roomMemberRepository.save(RoomMember.create(room, owner));
 		Receipt receipt = receiptRepository.save(Receipt.createManual(room, "카페", null, null, null));
 
 		mockMvc
@@ -151,11 +151,11 @@ class ReceiptCrudControllerTest {
 						  "payerId": %d,
 						  "declaredTotal": 9000
 						}
-						""".formatted(owner.getId()))
+						""".formatted(ownerMember.getId()))
 			)
 			.andExpect(status().isOk())
 			.andExpect(jsonPath("$.data.name").value("스타벅스"))
-			.andExpect(jsonPath("$.data.payerId").value(owner.getId()))
+			.andExpect(jsonPath("$.data.payerId").value(ownerMember.getId()))
 			.andExpect(jsonPath("$.data.declaredTotal").value(9000));
 	}
 
@@ -164,10 +164,10 @@ class ReceiptCrudControllerTest {
 	void 영수증_삭제는_품목과_배정을_함께_삭제한다() throws Exception {
 		User owner = createUser("owner@example.com", "owner");
 		Room room = roomRepository.save(Room.create("Capstone Team", owner));
-		roomMemberRepository.save(RoomMember.create(room, owner));
+		RoomMember ownerMember = roomMemberRepository.save(RoomMember.create(room, owner));
 		Receipt receipt = receiptRepository.save(Receipt.createManual(room, "카페", null, null, null));
 		Item item = itemRepository.save(Item.create(receipt, "아메리카노", 4500, 1));
-		assignmentRepository.save(Assignment.create(item, owner));
+		assignmentRepository.save(Assignment.create(item, ownerMember));
 
 		mockMvc
 			.perform(
@@ -186,7 +186,7 @@ class ReceiptCrudControllerTest {
 	void 수기_영수증_생성은_결제자와_선언_합계를_저장한다() throws Exception {
 		User owner = createUser("owner@example.com", "owner");
 		Room room = roomRepository.save(Room.create("Capstone Team", owner));
-		roomMemberRepository.save(RoomMember.create(room, owner));
+		RoomMember ownerMember = roomMemberRepository.save(RoomMember.create(room, owner));
 
 		mockMvc
 			.perform(
@@ -202,12 +202,40 @@ class ReceiptCrudControllerTest {
 						    { "name": "아메리카노", "price": 4500, "quantity": 2 }
 						  ]
 						}
-						""".formatted(owner.getId()))
+						""".formatted(ownerMember.getId()))
 			)
 			.andExpect(status().isCreated())
-			.andExpect(jsonPath("$.data.payerId").value(owner.getId()))
+			.andExpect(jsonPath("$.data.payerId").value(ownerMember.getId()))
 			.andExpect(jsonPath("$.data.payerNickname").value("owner"))
 			.andExpect(jsonPath("$.data.declaredTotal").value(9000));
+	}
+
+	@Test
+	@DisplayName("POST /api/rooms/{roomId}/receipts/manual 요청은 수동 멤버도 결제자로 저장한다")
+	void 수기_영수증_생성은_수동_멤버도_결제자로_저장한다() throws Exception {
+		User owner = createUser("owner@example.com", "owner");
+		Room room = roomRepository.save(Room.create("Capstone Team", owner));
+		roomMemberRepository.save(RoomMember.create(room, owner));
+		RoomMember manualMember = roomMemberRepository.save(RoomMember.createManual(room, "민지"));
+
+		mockMvc
+			.perform(
+				post("/api/rooms/{roomId}/receipts/manual", room.getId())
+					.header(HttpHeaders.AUTHORIZATION, bearer(owner))
+					.contentType(MediaType.APPLICATION_JSON)
+					.content("""
+						{
+						  "name": "점심",
+						  "payerId": %d,
+						  "items": [
+						    { "name": "파스타", "price": 14000, "quantity": 1 }
+						  ]
+						}
+						""".formatted(manualMember.getId()))
+			)
+			.andExpect(status().isCreated())
+			.andExpect(jsonPath("$.data.payerId").value(manualMember.getId()))
+			.andExpect(jsonPath("$.data.payerNickname").value("민지"));
 	}
 
 	@Test

@@ -12,7 +12,8 @@ public interface AssignmentRepository extends JpaRepository<Assignment, Long> {
 	@Query("""
 		select assignment
 		from Assignment assignment
-		join fetch assignment.user user
+		join fetch assignment.roomMember roomMember
+		left join fetch roomMember.user user
 		where assignment.item.id = :itemId
 		order by assignment.id asc
 		""")
@@ -21,6 +22,8 @@ public interface AssignmentRepository extends JpaRepository<Assignment, Long> {
 	@Query("""
 		select assignment
 		from Assignment assignment
+		join fetch assignment.roomMember roomMember
+		left join fetch roomMember.user user
 		where assignment.item.id in :itemIds
 		""")
 	List<Assignment> findAllByItemIdIn(@Param("itemIds") Collection<Long> itemIds);
@@ -28,7 +31,8 @@ public interface AssignmentRepository extends JpaRepository<Assignment, Long> {
 	@Query("""
 		select assignment
 		from Assignment assignment
-		join fetch assignment.user user
+		join fetch assignment.roomMember roomMember
+		left join fetch roomMember.user user
 		where assignment.item.id in :itemIds
 		order by assignment.item.id asc, assignment.id asc
 		""")
@@ -37,5 +41,9 @@ public interface AssignmentRepository extends JpaRepository<Assignment, Long> {
 	@Modifying(clearAutomatically = true)
 	@Query("delete from Assignment a where a.item.id in :itemIds")
 	void deleteAllByItemIdIn(@Param("itemIds") Collection<Long> itemIds);
+
+	@Modifying(clearAutomatically = true)
+	@Query("delete from Assignment a where a.roomMember.id = :roomMemberId")
+	void deleteAllByRoomMemberId(@Param("roomMemberId") Long roomMemberId);
 
 }

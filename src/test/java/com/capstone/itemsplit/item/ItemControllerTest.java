@@ -133,10 +133,10 @@ class ItemControllerTest {
 	void 품목과_배정을_함께_삭제한다() throws Exception {
 		User owner = createUser("owner@example.com", "owner");
 		Room room = roomRepository.save(Room.create("Capstone Team", owner));
-		roomMemberRepository.save(RoomMember.create(room, owner));
+		RoomMember ownerMember = roomMemberRepository.save(RoomMember.create(room, owner));
 		Receipt receipt = receiptRepository.save(Receipt.createManual(room, "카페", null, null, null));
 		Item item = itemRepository.save(Item.create(receipt, "아메리카노", 4500, 1));
-		assignmentRepository.save(Assignment.create(item, owner));
+		assignmentRepository.save(Assignment.create(item, ownerMember));
 
 		mockMvc
 			.perform(

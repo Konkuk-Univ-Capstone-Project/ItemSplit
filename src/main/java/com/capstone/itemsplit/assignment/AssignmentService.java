@@ -8,7 +8,6 @@ import com.capstone.itemsplit.receipt.Receipt;
 import com.capstone.itemsplit.receipt.ReceiptRepository;
 import com.capstone.itemsplit.room.RoomMember;
 import com.capstone.itemsplit.room.RoomMemberRepository;
-import com.capstone.itemsplit.user.User;
 import com.capstone.itemsplit.user.UserRepository;
 import com.capstone.itemsplit.room.RoomAuthorizationService;
 import java.util.LinkedHashSet;
@@ -47,17 +46,7 @@ public class AssignmentService {
 		Item item = validateRequestScope(roomId, receiptId, itemId, requesterId);
 		LinkedHashSet<Long> uniqueMemberIds = new LinkedHashSet<>(memberIds);
 
-		if (!uniqueMemberIds.isEmpty()) {
-			validateUsersExist(uniqueMemberIds);
-		}
-
-		List<RoomMember> roomMembers = uniqueMemberIds.isEmpty()
-			? List.of()
-			: roomMemberRepository.findAllByRoomIdAndUserIdIn(roomId, uniqueMemberIds);
-
-		if (roomMembers.size() != uniqueMemberIds.size()) {
-			throw new ApiException(ErrorCode.VALIDATION_ERROR, "All assignees must be members of this room.");
-		}
+		List<RoomMember> roomMembers = resolveAssigneeMembers(roomId, uniqueMemberIds);
 
 		List<Assignment> existingAssignments = assignmentRepository.findAllByItemId(itemId);
 		if (!existingAssignments.isEmpty()) {
@@ -65,12 +54,8 @@ public class AssignmentService {
 		}
 
 		if (!roomMembers.isEmpty()) {
-			Map<Long, User> userById = roomMembers.stream()
-				.map(RoomMember::getUser)
-				.collect(java.util.stream.Collectors.toMap(User::getId, Function.identity()));
-
-			List<Assignment> assignments = uniqueMemberIds.stream()
-				.map(memberId -> Assignment.create(item, userById.get(memberId)))
+			List<Assignment> assignments = roomMembers.stream()
+				.map(roomMember -> Assignment.create(item, roomMember))
 				.toList();
 
 			assignmentRepository.saveAll(assignments);
@@ -97,11 +82,31 @@ public class AssignmentService {
 		return item;
 	}
 
-	private void validateUsersExist(LinkedHashSet<Long> memberIds) {
-		long count = userRepository.countByIdIn(memberIds);
-		if (count != memberIds.size()) {
+	private List<RoomMember> resolveAssigneeMembers(Long roomId, LinkedHashSet<Long> memberIds) {
+		if (memberIds.isEmpty()) {
+			return List.of();
+		}
+
+		List<RoomMember> membersById = roomMemberRepository.findAllByRoomIdAndIdIn(roomId, memberIds);
+		if (membersById.size() == memberIds.size()) {
+			Map<Long, RoomMember> memberById = membersById.stream()
+				.collect(java.util.stream.Collectors.toMap(RoomMember::getId, Function.identity()));
+			return memberIds.stream().map(memberById::get).toList();
+		}
+
+		List<RoomMember> membersByUserId = roomMemberRepository.findAllByRoomIdAndUserIdIn(roomId, memberIds);
+		if (membersByUserId.size() == memberIds.size()) {
+			Map<Long, RoomMember> memberByUserId = membersByUserId.stream()
+				.collect(java.util.stream.Collectors.toMap(member -> member.getUser().getId(), Function.identity()));
+			return memberIds.stream().map(memberByUserId::get).toList();
+		}
+
+		long existingUserCount = userRepository.countByIdIn(memberIds);
+		if (existingUserCount != memberIds.size()) {
 			throw new ApiException(ErrorCode.NOT_FOUND, "One or more members were not found.");
 		}
+
+		throw new ApiException(ErrorCode.VALIDATION_ERROR, "All assignees must be members of this room.");
 	}
 
 	public record AssigneesResult(
@@ -120,9 +125,11 @@ public class AssignmentService {
 				item.getName(),
 				assignments.stream()
 					.map(assignment -> new AssigneeInfo(
-						assignment.getUser().getId(),
-						assignment.getUser().getEmail(),
-						assignment.getUser().getNickname()
+						assignment.getRoomMember().getId(),
+						assignment.getRoomMember().getUser() != null ? assignment.getRoomMember().getUser().getId() : null,
+						assignment.getRoomMember().getUser() != null ? assignment.getRoomMember().getUser().getEmail() : null,
+						assignment.getRoomMember().getDisplayName(),
+						assignment.getRoomMember().isLinkedUser()
 					))
 					.toList()
 			);
@@ -130,7 +137,7 @@ public class AssignmentService {
 
 	}
 
-	public record AssigneeInfo(Long userId, String email, String nickname) {
+	public record AssigneeInfo(Long memberId, Long userId, String email, String nickname, boolean linked) {
 	}
 
 }

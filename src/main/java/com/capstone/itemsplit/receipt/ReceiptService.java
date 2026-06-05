@@ -6,9 +6,8 @@ import com.capstone.itemsplit.assignment.AssignmentRepository;
 import com.capstone.itemsplit.item.Item;
 import com.capstone.itemsplit.item.ItemRepository;
 import com.capstone.itemsplit.room.Room;
+import com.capstone.itemsplit.room.RoomMember;
 import com.capstone.itemsplit.room.RoomMemberRepository;
-import com.capstone.itemsplit.user.User;
-import com.capstone.itemsplit.user.UserRepository;
 import com.capstone.itemsplit.room.RoomAuthorizationService;
 import com.capstone.itemsplit.storage.StorageService;
 import java.io.IOException;
@@ -31,7 +30,6 @@ public class ReceiptService {
 	private final ReceiptRepository receiptRepository;
 	private final ItemRepository itemRepository;
 	private final AssignmentRepository assignmentRepository;
-	private final UserRepository userRepository;
 	private final RoomMemberRepository roomMemberRepository;
 	private final RoomAuthorizationService roomAuthorizationService;
 	private final StorageService storageService;
@@ -77,7 +75,7 @@ public class ReceiptService {
 		List<ManualReceiptItemCommand> items
 	) {
 		Room room = roomAuthorizationService.checkMember(roomId, userId);
-		User payer = resolvePayer(roomId, payerId);
+		RoomMember payer = resolvePayer(roomId, payerId);
 
 		Receipt receipt = receiptRepository.save(Receipt.createManual(room, name.trim(), payer, declaredTotal, purchasedAt));
 		List<Item> savedItems = itemRepository.saveAll(
@@ -120,7 +118,7 @@ public class ReceiptService {
 	) {
 		roomAuthorizationService.checkMember(roomId, userId);
 		Receipt receipt = findReceiptInRoom(roomId, receiptId);
-		User payer = resolvePayer(roomId, payerId);
+		RoomMember payer = resolvePayer(roomId, payerId);
 		receipt.update(name.trim(), payer, declaredTotal, purchasedAt);
 		List<Item> items = itemRepository.findAllByReceiptId(receiptId);
 		return ReceiptDetailResult.from(receipt, items);
@@ -144,14 +142,11 @@ public class ReceiptService {
 			.orElseThrow(() -> new ApiException(ErrorCode.NOT_FOUND, "Receipt was not found."));
 	}
 
-	private User resolvePayer(Long roomId, Long payerId) {
+	private RoomMember resolvePayer(Long roomId, Long payerId) {
 		if (payerId == null) {
 			return null;
 		}
-		if (!roomMemberRepository.existsByRoomIdAndUserId(roomId, payerId)) {
-			throw new ApiException(ErrorCode.VALIDATION_ERROR, "Payer must be a member of this room.");
-		}
-		return userRepository.findById(payerId)
+		return roomMemberRepository.findByRoomIdAndIdWithUser(roomId, payerId)
 			.orElseThrow(() -> new ApiException(ErrorCode.NOT_FOUND, "Payer was not found."));
 	}
 
@@ -199,7 +194,7 @@ public class ReceiptService {
 				receipt.getName(),
 				receipt.getSourceType(),
 				receipt.getPayer() != null ? receipt.getPayer().getId() : null,
-				receipt.getPayer() != null ? receipt.getPayer().getNickname() : null,
+				receipt.getPayer() != null ? receipt.getPayer().getDisplayName() : null,
 				receipt.getDeclaredTotal(),
 				receipt.getPurchasedAt(),
 				receipt.getCreatedAt()
@@ -234,7 +229,7 @@ public class ReceiptService {
 				receipt.getName(),
 				receipt.getSourceType(),
 				receipt.getPayer() != null ? receipt.getPayer().getId() : null,
-				receipt.getPayer() != null ? receipt.getPayer().getNickname() : null,
+				receipt.getPayer() != null ? receipt.getPayer().getDisplayName() : null,
 				receipt.getDeclaredTotal(),
 				receipt.getPurchasedAt(),
 				receipt.getCreatedAt(),
@@ -300,7 +295,7 @@ public class ReceiptService {
 				receipt.getName(),
 				receipt.getSourceType(),
 				receipt.getPayer() != null ? receipt.getPayer().getId() : null,
-				receipt.getPayer() != null ? receipt.getPayer().getNickname() : null,
+				receipt.getPayer() != null ? receipt.getPayer().getDisplayName() : null,
 				receipt.getDeclaredTotal(),
 				receipt.getPurchasedAt(),
 				items.stream()

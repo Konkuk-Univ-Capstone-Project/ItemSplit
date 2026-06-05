@@ -1,7 +1,7 @@
 package com.capstone.itemsplit.receipt;
 
 import com.capstone.itemsplit.room.Room;
-import com.capstone.itemsplit.user.User;
+import com.capstone.itemsplit.room.RoomMember;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import jakarta.persistence.Column;
@@ -50,8 +50,8 @@ public class Receipt {
     private Long fileSize;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "payer_id")
-    private User payer;
+    @JoinColumn(name = "payer_member_id")
+    private RoomMember payer;
 
     private Integer declaredTotal;
 
@@ -97,7 +97,7 @@ public class Receipt {
         );
     }
 
-    public static Receipt createManual(Room room, String name, User payer, Integer declaredTotal, LocalDate purchasedAt) {
+    public static Receipt createManual(Room room, String name, RoomMember payer, Integer declaredTotal, LocalDate purchasedAt) {
         Receipt receipt = new Receipt(room, name, ReceiptSourceType.MANUAL, null, null, null, null);
         receipt.payer = payer;
         receipt.declaredTotal = declaredTotal;
@@ -105,7 +105,7 @@ public class Receipt {
         return receipt;
     }
 
-    public void update(String name, User payer, Integer declaredTotal, LocalDate purchasedAt) {
+    public void update(String name, RoomMember payer, Integer declaredTotal, LocalDate purchasedAt) {
         this.name = name;
         this.payer = payer;
         this.declaredTotal = declaredTotal;
