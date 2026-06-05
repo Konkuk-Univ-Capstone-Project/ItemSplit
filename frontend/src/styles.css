@@ -94,25 +94,20 @@ button:disabled {
 }
 
 .brand-lockup {
-  gap: 12px;
+  gap: 0;
 }
 
-.brand-mark {
-  display: grid;
-  place-items: center;
-  width: 42px;
-  height: 42px;
-  border-radius: 50%;
-  background: var(--ink-deep);
-  color: var(--canvas);
-  font-size: 14px;
-  font-weight: 700;
+.brand-lockup > div {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .brand-lockup strong {
   display: block;
   color: var(--ink-deep);
-  font-size: 18px;
+  font-size: 24px;
   font-weight: 700;
   line-height: 1.2;
 }
@@ -120,8 +115,8 @@ button:disabled {
 .brand-lockup span {
   display: block;
   color: var(--steel);
-  font-size: 12px;
-  font-weight: 400;
+  font-size: 16px;
+  font-weight: 700;
   line-height: 1.35;
 }
 
@@ -238,6 +233,11 @@ button:disabled {
   line-height: 1.16;
   letter-spacing: 0;
   font-feature-settings: "ss01", "ss02";
+}
+
+.auth-copy h1 {
+  font-size: clamp(38px, 4.2vw, 54px);
+  white-space: nowrap;
 }
 
 .hero-visual {
@@ -1266,6 +1266,10 @@ select:focus {
     grid-template-columns: 1fr;
   }
 
+  .auth-copy h1 {
+    white-space: normal;
+  }
+
   .auth-form-surface {
     border-left: 0;
     border-top: 1px solid var(--hairline-soft);
@@ -1311,6 +1315,7 @@ select:focus {
 
   .auth-copy h1 {
     font-size: 34px;
+    white-space: normal;
   }
 
   .hero-visual {

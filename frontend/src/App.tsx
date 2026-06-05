@@ -254,10 +254,9 @@ function App() {
     <div className="app-shell">
       <header className="topbar">
         <div className="brand-lockup">
-          <div className="brand-mark">IS</div>
           <div>
-            <strong>ItemSplit</strong>
-            <span>receipt settlement workspace</span>
+            <strong>Item Split</strong>
+            <span>- 모임 정산 서비스</span>
           </div>
         </div>
         <div className="topbar-actions">
@@ -318,13 +317,12 @@ function AuthScreen({
       <section className="auth-panel">
         <div className="auth-copy">
           <div className="brand-lockup">
-            <div className="brand-mark">IS</div>
             <div>
-              <strong>ItemSplit</strong>
-              <span>receipt settlement workspace</span>
+              <strong>Item Split</strong>
+              <span>- 모임 정산 서비스</span>
             </div>
           </div>
-          <h1>방, 영수증, 정산을 한 번에 정리합니다.</h1>
+          <h1>더치페이 쉽고 간편하게</h1>
           <div className="hero-visual" aria-hidden="true">
             <div className="device-frame">
               <div className="receipt-sheet">
