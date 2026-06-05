@@ -90,7 +90,23 @@ API까지 함께 띄우는 데모 환경은 `demo` profile을 사용합니다.
 docker compose --profile demo up -d --build
 ```
 
-기본 API 포트는 `8080`입니다. 필요하면 `.env`에 `APP_PORT=18080`처럼 지정할 수 있습니다.
+기본 API 포트는 `8080`, 프론트엔드 포트는 `3000`입니다. 필요하면 `.env`에 `APP_PORT=18080`, `FRONTEND_PORT=13000`처럼 지정할 수 있습니다.
+
+```bash
+open http://localhost:3000
+```
+
+## 프론트엔드 로컬 실행
+
+프론트엔드는 `frontend/` 하위의 React + TypeScript + Vite 앱입니다.
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+Vite 개발 서버는 기본적으로 `http://localhost:5173`에서 실행되며, `/api` 요청은 `http://localhost:8080` 백엔드로 프록시됩니다.
 
 ## 운영 기본값
 

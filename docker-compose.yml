@@ -26,6 +26,17 @@ services:
     volumes:
       - itemsplit-storage:/app/storage
 
+  frontend:
+    profiles: ["demo"]
+    build:
+      context: ./frontend
+    container_name: itemsplit-frontend
+    restart: unless-stopped
+    depends_on:
+      - app
+    ports:
+      - "${FRONTEND_PORT:-3000}:80"
+
   postgres:
     image: postgres:16-alpine
     container_name: itemsplit-postgres
