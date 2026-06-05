@@ -63,16 +63,3 @@
 - 방 삭제 API
 
 관련 backend 브랜치: `backend-room-member-receipt-ops`
-
-## Verification
-
-```bash
-cd frontend
-npm run build
-```
-
-## Commits
-
-- `fcd168d feat: React Vite 프론트엔드 워크스페이스 추가`
-- `57c05f6 chore: 프론트엔드 Docker 실행 환경 추가`
-
