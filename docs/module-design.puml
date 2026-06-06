@@ -1,0 +1,132 @@
+@startuml ItemSplitModuleDesign
+left to right direction
+
+skinparam shadowing false
+skinparam componentStyle rectangle
+skinparam packageStyle rectangle
+skinparam ArrowColor #334155
+skinparam component {
+  BackgroundColor #F8FAFC
+  BorderColor #334155
+}
+
+package "auth 모듈" as AuthModule {
+  component "AuthController" as AuthController
+  component "AuthService" as AuthService
+  component "JwtTokenProvider" as JwtTokenProvider
+  component "JwtAuthenticationFilter" as JwtAuthenticationFilter
+}
+
+package "user 모듈" as UserModule {
+  component "UserService" as UserService
+  component "UserRepository" as UserRepository
+  component "User" as UserEntity
+}
+
+package "room 모듈" as RoomModule {
+  component "RoomController" as RoomController
+  component "SharedRoomController" as SharedRoomController
+  component "RoomService" as RoomService
+  component "RoomShareService" as RoomShareService
+  component "RoomAuthorizationService" as RoomAuthorizationService
+  component "InviteTokenGenerator" as InviteTokenGenerator
+  component "Room / RoomMember\nInviteToken / ShareToken" as RoomEntities
+}
+
+package "receipt 모듈" as ReceiptModule {
+  component "ReceiptController" as ReceiptController
+  component "ReceiptService" as ReceiptService
+  component "ReceiptRepository" as ReceiptRepository
+  component "Receipt" as ReceiptEntity
+}
+
+package "item 모듈" as ItemModule {
+  component "ItemController" as ItemController
+  component "ItemService" as ItemService
+  component "ItemRepository" as ItemRepository
+  component "Item" as ItemEntity
+}
+
+package "assignment 모듈" as AssignmentModule {
+  component "AssignmentController" as AssignmentController
+  component "AssignmentService" as AssignmentService
+  component "AssignmentRepository" as AssignmentRepository
+  component "Assignment" as AssignmentEntity
+}
+
+package "settlement 모듈" as SettlementModule {
+  component "SettlementController" as SettlementController
+  component "SettlementService" as SettlementService
+  note right of SettlementService
+    RoomMember 기준 정산
+    - 배정 없는 품목 제외
+    - 품목 금액을 참여자 수로 분할
+    - 나머지 1원 단위는 고정 seed로 분배
+    - 결제자 paid, 참여자 burden 계산
+    - net = paid - burden
+  end note
+}
+
+package "storage 모듈" as StorageModule {
+  component "StorageService" as StorageService
+  component "LocalStorageService" as LocalStorageService
+}
+
+package "common/config 모듈" as CommonModule {
+  component "ApiResponse / ErrorResponse" as ApiResponse
+  component "GlobalExceptionHandler" as GlobalExceptionHandler
+  component "SecurityConfig" as SecurityConfig
+  component "RateLimitFilter" as RateLimitFilter
+}
+
+AuthController --> AuthService
+AuthService --> UserService
+AuthService --> JwtTokenProvider
+JwtAuthenticationFilter --> JwtTokenProvider
+JwtAuthenticationFilter --> UserService
+
+RoomController --> RoomService
+RoomController --> RoomShareService
+SharedRoomController --> RoomShareService
+SharedRoomController --> SettlementService
+RoomService --> UserService
+RoomService --> InviteTokenGenerator
+RoomService --> RoomAuthorizationService
+RoomShareService --> RoomAuthorizationService
+RoomService --> RoomEntities
+
+ReceiptController --> ReceiptService
+ReceiptService --> RoomAuthorizationService
+ReceiptService --> StorageService
+ReceiptService --> ReceiptRepository
+ReceiptService --> ReceiptEntity
+
+ItemController --> ItemService
+ItemService --> RoomAuthorizationService
+ItemService --> ItemRepository
+ItemService --> ItemEntity
+
+AssignmentController --> AssignmentService
+AssignmentService --> RoomAuthorizationService
+AssignmentService --> AssignmentRepository
+AssignmentService --> ItemRepository
+AssignmentService --> AssignmentEntity
+
+SettlementController --> SettlementService
+SettlementService --> RoomAuthorizationService
+SettlementService --> ReceiptRepository
+SettlementService --> ItemRepository
+SettlementService --> AssignmentRepository
+
+LocalStorageService ..|> StorageService
+SecurityConfig --> JwtAuthenticationFilter
+SecurityConfig --> RateLimitFilter
+GlobalExceptionHandler --> ApiResponse
+
+UserRepository --> UserEntity
+ReceiptEntity --> RoomEntities
+ItemEntity --> ReceiptEntity
+AssignmentEntity --> ItemEntity
+AssignmentEntity --> RoomEntities
+
+@enduml

@@ -1,0 +1,87 @@
+@startuml ItemSplitSystemArchitecture
+left to right direction
+
+skinparam shadowing false
+skinparam componentStyle rectangle
+skinparam packageStyle rectangle
+skinparam ArrowColor #334155
+skinparam component {
+  BackgroundColor #F8FAFC
+  BorderColor #334155
+}
+skinparam database {
+  BackgroundColor #EFF6FF
+  BorderColor #1D4ED8
+}
+
+actor "서비스 사용자" as User
+actor "공유 링크 조회자" as SharedViewer
+
+node "Client" {
+  component "Web Browser" as Browser
+  component "React Web App\nTypeScript + Vite" as Frontend
+}
+
+node "Server" {
+  component "Nginx\n(demo 정적 파일 제공)" as Nginx
+
+  rectangle "Spring Boot API Server" {
+    component "Security Filter\nJWT 인증 / Rate Limit" as Security
+
+    package "Presentation Layer" {
+      component "AuthController" as AuthController
+      component "RoomController\nSharedRoomController" as RoomController
+      component "ReceiptController\nItemController" as ReceiptController
+      component "AssignmentController" as AssignmentController
+      component "SettlementController" as SettlementController
+    }
+
+    package "Application Layer" {
+      component "AuthService\nUserService" as AuthService
+      component "RoomService\nRoomShareService\nRoomAuthorizationService" as RoomService
+      component "ReceiptService\nItemService" as ReceiptService
+      component "AssignmentService" as AssignmentService
+      component "SettlementService" as SettlementService
+      component "StorageService" as StorageService
+    }
+
+    package "Persistence Layer" {
+      component "Spring Data JPA\nRepositories" as Repositories
+      component "JPA Entities\nUser, Room, RoomMember,\nReceipt, Item, Assignment" as Entities
+    }
+  }
+}
+
+database "PostgreSQL" as PostgreSQL
+folder "Local Storage\n영수증 이미지 파일" as LocalStorage
+
+User --> Browser : 화면 조작
+SharedViewer --> Browser : 공유 토큰 조회
+Browser --> Frontend : UI 렌더링
+Browser --> Nginx : demo 접속
+Nginx --> Frontend : 정적 리소스 제공
+
+Frontend --> Security : REST API\nJSON / multipart
+Security --> AuthController
+Security --> RoomController
+Security --> ReceiptController
+Security --> AssignmentController
+Security --> SettlementController
+
+AuthController --> AuthService
+RoomController --> RoomService
+ReceiptController --> ReceiptService
+AssignmentController --> AssignmentService
+SettlementController --> SettlementService
+
+AuthService --> Repositories
+RoomService --> Repositories
+ReceiptService --> Repositories
+ReceiptService --> StorageService
+AssignmentService --> Repositories
+SettlementService --> Repositories
+Repositories --> Entities
+Repositories --> PostgreSQL
+StorageService --> LocalStorage
+
+@enduml
