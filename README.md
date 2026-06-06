@@ -23,6 +23,32 @@ ItemSplit은 모임/회식 지출을 영수증 단위로 등록하고, 품목별
 - Test: JUnit 5, Spring Boot Test, Testcontainers, H2
 - Runtime: Docker, Docker Compose, Nginx(frontend demo)
 
+## 데모 Docker 실행
+
+백엔드, 프론트엔드, DB를 함께 띄우는 데모 환경은 `demo` profile을 사용합니다.
+
+```bash
+docker compose --profile demo up -d --build
+```
+
+기본 API 포트는 `8080`, 프론트엔드 포트는 `3000`입니다. 필요하면 `.env`에 `APP_PORT=18080`, `FRONTEND_PORT=13000`처럼 지정할 수 있습니다.
+
+```bash
+open http://localhost:3000
+```
+
+데모 Docker 종료
+
+```bash
+docker compose --profile demo down
+```
+
+데모 Docker 종료 및 볼륨 삭제
+
+```bash
+docker compose --profile demo down -v
+```
+
 ## 로컬 실행
 
 ### 1. 환경 변수 준비
@@ -51,6 +77,18 @@ DB 상태 확인
 
 ```bash
 docker compose ps
+```
+
+로컬 Docker 종료
+
+```bash
+docker compose down
+```
+
+로컬 Docker 종료 및 볼륨 삭제
+
+```bash
+docker compose down -v
 ```
 
 ### 3. 백엔드 실행
@@ -94,20 +132,6 @@ curl.exe http://localhost:8080/actuator/health
 ```
 
 정상 실행 시 `{"status":"UP"}` 응답을 확인할 수 있습니다.
-
-## 데모 Docker 실행
-
-백엔드, 프론트엔드, DB를 함께 띄우는 데모 환경은 `demo` profile을 사용합니다.
-
-```bash
-docker compose --profile demo up -d --build
-```
-
-기본 API 포트는 `8080`, 프론트엔드 포트는 `3000`입니다. 필요하면 `.env`에 `APP_PORT=18080`, `FRONTEND_PORT=13000`처럼 지정할 수 있습니다.
-
-```bash
-open http://localhost:3000
-```
 
 ## 테스트
 
