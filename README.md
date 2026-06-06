@@ -1,12 +1,33 @@
 # ItemSplit
 
-졸업 프로젝트 백엔드입니다.
+ItemSplit은 모임/회식 지출을 영수증 단위로 등록하고, 품목별 참여자를 지정해 정산할 수 있는 졸업 프로젝트 웹앱입니다. Spring Boot 백엔드 API와 React + TypeScript + Vite 프론트엔드를 함께 제공합니다.
+
+계정이 있는 사용자뿐 아니라 아직 가입하지 않은 수동 멤버도 방 안의 결제자/참여자로 다룰 수 있도록 `RoomMember`를 정산 기준으로 사용합니다. 초대 토큰으로 참여한 사용자는 기존 수동 멤버와 자신을 매칭하거나 새 멤버로 참여할 수 있고, 정산 결과는 읽기 전용 공유 토큰으로 조회할 수 있습니다.
+
+## 주요 기능
+
+- 이메일/비밀번호 회원가입, 로그인, JWT 기반 인증
+- 방 생성/삭제, 방 멤버 조회, 초대 토큰 발급과 참여
+- 수동 멤버 추가/이름 수정/삭제, 초대 참여 시 수동 멤버 매칭
+- 이미지 영수증 업로드, 수동 영수증 생성/조회/수정/삭제
+- 영수증 품목 추가/수정/삭제, 품목별 참여자 지정
+- `RoomMember` 기준 결제자/참여자/정산 계산
+- 멤버별 부담액/결제액/net과 송금 흐름 조회
+- 읽기 전용 공유 토큰을 통한 인증 없는 정산 결과 조회
+- React 대시보드와 Docker Compose demo profile 실행 환경
+
+## 기술 스택
+
+- Backend: Java 21, Spring Boot 3.5, Spring Security, Spring Data JPA, PostgreSQL
+- Frontend: React 19, TypeScript, Vite, lucide-react
+- Test: JUnit 5, Spring Boot Test, Testcontainers, H2
+- Runtime: Docker, Docker Compose, Nginx(frontend demo)
 
 ## 로컬 실행
 
 ### 1. 환경 변수 준비
 
-기본값으로도 실행할 수 있지만, 팀 공통 설정을 맞추려면 예시 파일을 복사해서 `.env`를 만듭니다.
+기본값으로도 실행할 수 있지만, 로컬 설정을 명시하려면 예시 파일을 복사해서 `.env`를 만듭니다.
 
 macOS
 
@@ -23,7 +44,7 @@ Copy-Item .env.example .env
 ### 2. DB 실행
 
 ```bash
-docker compose up -d
+docker compose up -d postgres
 ```
 
 DB 상태 확인
@@ -32,7 +53,7 @@ DB 상태 확인
 docker compose ps
 ```
 
-### 3. 서버 실행
+### 3. 백엔드 실행
 
 macOS
 
@@ -48,7 +69,17 @@ gradlew.bat bootRun
 
 기본 프로파일은 `local`이며, 로컬 DB 접속 정보는 `.env` 또는 기본값을 사용합니다.
 
-### 4. 헬스 체크
+### 4. 프론트엔드 실행
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+Vite 개발 서버는 기본적으로 `http://localhost:5173`에서 실행되며, `/api` 요청은 `http://localhost:8080` 백엔드로 프록시됩니다.
+
+### 5. 헬스 체크
 
 macOS
 
@@ -64,27 +95,9 @@ curl.exe http://localhost:8080/actuator/health
 
 정상 실행 시 `{"status":"UP"}` 응답을 확인할 수 있습니다.
 
-## 운영 프로파일
-
-운영 환경에서는 `prod` 프로파일을 사용하며 아래 환경 변수를 반드시 주입해야 합니다.
-
-- `SPRING_PROFILES_ACTIVE=prod`
-- `DB_URL`
-- `DB_USER`
-- `DB_PASSWORD`
-- `JWT_SECRET`
-
-운영 프로파일은 `ddl-auto=validate`로 동작합니다.
-
 ## 데모 Docker 실행
 
-DB만 실행할 때는 기존처럼 아래 명령을 사용합니다.
-
-```bash
-docker compose up -d postgres
-```
-
-API까지 함께 띄우는 데모 환경은 `demo` profile을 사용합니다.
+백엔드, 프론트엔드, DB를 함께 띄우는 데모 환경은 `demo` profile을 사용합니다.
 
 ```bash
 docker compose --profile demo up -d --build
@@ -96,200 +109,108 @@ docker compose --profile demo up -d --build
 open http://localhost:3000
 ```
 
-## 프론트엔드 로컬 실행
+## 테스트
 
-프론트엔드는 `frontend/` 하위의 React + TypeScript + Vite 앱입니다.
+```bash
+./gradlew test
+```
+
+프론트엔드 타입 검사와 빌드는 아래 명령으로 실행합니다.
 
 ```bash
 cd frontend
-npm install
-npm run dev
+npm run build
 ```
 
-Vite 개발 서버는 기본적으로 `http://localhost:5173`에서 실행되며, `/api` 요청은 `http://localhost:8080` 백엔드로 프록시됩니다.
+## 환경 설정
 
-## 운영 기본값
+### local profile
+
+- 기본 프로파일입니다.
+- PostgreSQL에 연결합니다.
+- `spring.jpa.hibernate.ddl-auto=update`로 동작합니다.
+
+### prod profile
+
+운영 환경에서는 `prod` 프로파일을 사용하며 아래 환경 변수를 반드시 주입해야 합니다.
+
+- `SPRING_PROFILES_ACTIVE=prod`
+- `DB_URL`
+- `DB_USER`
+- `DB_PASSWORD`
+- `JWT_SECRET`
+
+운영 프로파일은 `ddl-auto=validate`로 동작합니다.
+
+### 레이트리밋
 
 - 모든 `/api/**` 요청에는 기본 레이트리밋이 적용됩니다.
 - 기본값은 `60초 동안 IP당 120회`입니다.
 - 조정 환경 변수: `RATE_LIMIT_ENABLED`, `RATE_LIMIT_CAPACITY`, `RATE_LIMIT_WINDOW_SECONDS`
 - 제한 초과 시 `429 TOO_MANY_REQUESTS`와 공통 에러 응답 포맷이 반환됩니다.
 
-## Assignment API
+## API 요약
 
-Sprint 3 기준으로 item assignees 조회와 전체 교체 API가 준비되어 있습니다.
+### Auth
 
-### 1. 참여자 목록 조회
+- `POST /api/auth/signup`
+- `POST /api/auth/login`
+- `GET /api/auth/me`
 
-```http
-GET /api/rooms/{roomId}/receipts/{receiptId}/items/{itemId}/assignees
-Authorization: Bearer {accessToken}
-```
+### Room / Member
 
-### 2. 참여자 목록 전체 교체
+- `POST /api/rooms`
+- `GET /api/rooms/{roomId}/members`
+- `DELETE /api/rooms/{roomId}`
+- `POST /api/rooms/{roomId}/members/manual`
+- `PUT /api/rooms/{roomId}/members/{memberId}`
+- `DELETE /api/rooms/{roomId}/members/{memberId}`
+- `POST /api/rooms/{roomId}/invite-token`
+- `GET /api/rooms/join-options?token={inviteToken}`
+- `POST /api/rooms/join?token={inviteToken}`
 
-```http
-PUT /api/rooms/{roomId}/receipts/{receiptId}/items/{itemId}/assignees
-Authorization: Bearer {accessToken}
-Content-Type: application/json
+### Receipt / Item
 
-{
-  "memberIds": [2, 3]
-}
-```
+- `GET /api/rooms/{roomId}/receipts`
+- `GET /api/rooms/{roomId}/receipts/{receiptId}`
+- `POST /api/rooms/{roomId}/receipts/image`
+- `POST /api/rooms/{roomId}/receipts/manual`
+- `PUT /api/rooms/{roomId}/receipts/{receiptId}`
+- `DELETE /api/rooms/{roomId}/receipts/{receiptId}`
+- `POST /api/rooms/{roomId}/receipts/{receiptId}/items`
+- `PUT /api/rooms/{roomId}/receipts/{receiptId}/items/{itemId}`
+- `DELETE /api/rooms/{roomId}/receipts/{receiptId}/items/{itemId}`
 
-### 3. 정책
+### Assignment / Settlement / Share
 
-- `memberIds`는 현재 모델 기준 `RoomMember.id`가 아니라 `User.id`입니다.
-- 요청자는 반드시 해당 room의 멤버여야 합니다.
-- `memberIds`에 들어가는 사용자도 모두 해당 room의 멤버여야 합니다.
-- `memberIds: []`는 해당 item의 assignee 전체 해제를 의미합니다.
-- 중복 `memberIds`는 서버에서 정리한 뒤 저장합니다.
+- `GET /api/rooms/{roomId}/receipts/{receiptId}/items/{itemId}/assignees`
+- `PUT /api/rooms/{roomId}/receipts/{receiptId}/items/{itemId}/assignees`
+- `GET /api/rooms/{roomId}/settlements`
+- `POST /api/rooms/{roomId}/share-token`
+- `GET /api/shared/rooms/{token}/settlements`
 
-### 4. 성공 응답 예시
+## 정산 규칙
 
-```json
-{
-  "success": true,
-  "data": {
-    "roomId": 1,
-    "receiptId": 10,
-    "itemId": 100,
-    "itemName": "Pasta",
-    "assignees": [
-      {
-        "userId": 2,
-        "email": "alice@example.com",
-        "nickname": "Alice"
-      },
-      {
-        "userId": 3,
-        "email": "bob@example.com",
-        "nickname": "Bob"
-      }
-    ]
-  },
-  "error": null
-}
-```
+- 품목 금액은 해당 품목에 배정된 멤버 수로 나누어 부담액을 계산합니다.
+- 1원 단위 나머지는 `roomId`와 `itemId` 기반의 고정 seed로 참여자에게 분배해 조회마다 같은 결과를 보장합니다.
+- 결제액은 영수증의 결제자로 지정된 멤버에게 합산됩니다.
+- `net = paid - burden`이며, 양수면 받을 금액, 음수면 보낼 금액입니다.
+- 참여자가 지정되지 않은 품목은 정산에서 제외됩니다.
 
-### 5. A 연동 메모
+## 프로젝트 구조
 
-- 정산 계산 시 item별 assignee 목록은 `GET /api/rooms/{roomId}/receipts/{receiptId}/items/{itemId}/assignees`로 조회할 수 있습니다.
-- 서버는 `receipt -> room`, `item -> receipt`, `assignee user -> room member` 관계를 모두 검증하므로, 성공 응답에 포함된 assignee는 항상 해당 room 멤버라는 전제를 두고 정산 엔진에서 사용할 수 있습니다.
-- 빈 assignee 목록은 아직 아무도 지정되지 않았거나, 전체 해제된 상태로 해석하면 됩니다.
+```text
+src/main/java/com/capstone/itemsplit
+├── auth          # 회원가입, 로그인, JWT 인증
+├── room          # 방, 멤버, 초대/공유 토큰
+├── receipt       # 영수증 생성/조회/수정/삭제
+├── item          # 영수증 품목 관리
+├── assignment    # 품목별 참여자 지정
+├── settlement    # 정산 계산
+├── storage       # 이미지 파일 저장
+├── common        # 공통 응답, 예외, 레이트리밋
+└── config        # 보안 및 애플리케이션 설정
 
-## Receipt API
-
-`Receipt`는 이제 이미지 업로드 전용 엔티티가 아니라, room 안의 영수증/지출 묶음을 표현하는 공통 루트입니다.
-
-### 1. 이미지 영수증 업로드
-
-```http
-POST /api/rooms/{roomId}/receipts/image
-Authorization: Bearer {accessToken}
-Content-Type: multipart/form-data
-```
-
-- `sourceType`은 `IMAGE_UPLOAD`
-- 파일 메타데이터(`storedPath`, `originalFilename`, `contentType`, `fileSize`)가 함께 저장됩니다.
-
-### 2. 수동 입력 영수증 생성
-
-```http
-POST /api/rooms/{roomId}/receipts/manual
-Authorization: Bearer {accessToken}
-Content-Type: application/json
-
-{
-  "name": "Dinner Manual Entry",
-  "items": [
-    { "name": "Pasta", "price": 15000, "quantity": 1 },
-    { "name": "Pizza", "price": 22000, "quantity": 2 }
-  ]
-}
-```
-
-- `sourceType`은 `MANUAL`
-- 수동 입력 영수증은 첨부 파일이 없으므로 파일 메타데이터는 비어 있습니다.
-- item 목록은 receipt 생성과 함께 저장됩니다.
-
-### 3. sourceType 정책
-
-- `IMAGE_UPLOAD`: 이미지 파일을 올려 만든 receipt
-- `MANUAL`: 텍스트로 receipt와 item 목록을 직접 입력해 만든 receipt
-
-정산, assignment, room 권한 로직은 두 타입 모두 동일한 `Receipt -> Item -> Room` 구조를 기준으로 동작합니다.
-
-## Shared Read-only API
-
-방 멤버는 정산 결과 공유용 읽기 전용 토큰을 발급할 수 있습니다.
-
-### 1. 공유 토큰 발급/재발급
-
-```http
-POST /api/rooms/{roomId}/share-token
-Authorization: Bearer {accessToken}
-```
-
-- 요청자는 해당 room의 멤버여야 합니다.
-- 호출할 때마다 새 토큰으로 교체되며, 이전 공유 토큰은 더 이상 사용할 수 없습니다.
-- 기본 만료 기간은 14일입니다.
-
-### 2. 공유 정산 조회
-
-```http
-GET /api/shared/rooms/{token}/settlements
-```
-
-- 인증 없이 조회할 수 있습니다.
-- 쓰기 API는 공유 토큰으로 호출할 수 없습니다.
-- 응답에는 `readOnly=true`, `shareExpiresAt`, 정산 멤버 목록이 포함됩니다.
-
-## Settlement API
-
-### 1. 정산 결과 조회
-
-```http
-GET /api/rooms/{roomId}/settlements
-Authorization: Bearer {accessToken}
-```
-
-- 요청자는 해당 room의 멤버여야 합니다.
-- 정산 결과는 DB에 저장하지 않고 요청마다 on-demand로 계산합니다.
-
-### 2. 계산 규칙
-
-- **부담액(burden)**: 각 item을 배정된 멤버 수로 N등분. 1원 단위 나머지는 `roomId + itemId` 시드 기반 seeded random으로 참여자 중 1명에게 귀속 (조회 시마다 동일한 결과 보장).
-- **지불액(paid)**: receipt의 `payer`가 실제로 낸 금액 (배정된 item 합산).
-- **net**: `paid - burden`. 양수면 받아야 할 금액, 음수면 내야 할 금액.
-- Assignment가 없는 item은 정산에서 제외됩니다.
-
-### 3. 성공 응답 예시
-
-```json
-{
-  "success": true,
-  "data": {
-    "roomId": 1,
-    "roomName": "팀 회식",
-    "members": [
-      {
-        "userId": 1,
-        "nickname": "Alice",
-        "burden": 15000,
-        "paid": 30000,
-        "net": 15000
-      },
-      {
-        "userId": 2,
-        "nickname": "Bob",
-        "burden": 15000,
-        "paid": 0,
-        "net": -15000
-      }
-    ]
-  },
-  "error": null
-}
+frontend
+└── src           # React + TypeScript 웹 클라이언트
 ```
