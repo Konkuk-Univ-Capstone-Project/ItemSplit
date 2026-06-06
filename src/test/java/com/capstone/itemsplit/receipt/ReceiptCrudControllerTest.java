@@ -148,14 +148,14 @@ class ReceiptCrudControllerTest {
 					.content("""
 						{
 						  "name": "스타벅스",
-						  "payerId": %d,
+						  "payerMemberId": %d,
 						  "declaredTotal": 9000
 						}
 						""".formatted(ownerMember.getId()))
 			)
 			.andExpect(status().isOk())
 			.andExpect(jsonPath("$.data.name").value("스타벅스"))
-			.andExpect(jsonPath("$.data.payerId").value(ownerMember.getId()))
+			.andExpect(jsonPath("$.data.payerMemberId").value(ownerMember.getId()))
 			.andExpect(jsonPath("$.data.declaredTotal").value(9000));
 	}
 
@@ -196,7 +196,7 @@ class ReceiptCrudControllerTest {
 					.content("""
 						{
 						  "name": "카페",
-						  "payerId": %d,
+						  "payerMemberId": %d,
 						  "declaredTotal": 9000,
 						  "items": [
 						    { "name": "아메리카노", "price": 4500, "quantity": 2 }
@@ -205,7 +205,7 @@ class ReceiptCrudControllerTest {
 						""".formatted(ownerMember.getId()))
 			)
 			.andExpect(status().isCreated())
-			.andExpect(jsonPath("$.data.payerId").value(ownerMember.getId()))
+			.andExpect(jsonPath("$.data.payerMemberId").value(ownerMember.getId()))
 			.andExpect(jsonPath("$.data.payerNickname").value("owner"))
 			.andExpect(jsonPath("$.data.declaredTotal").value(9000));
 	}
@@ -226,7 +226,7 @@ class ReceiptCrudControllerTest {
 					.content("""
 						{
 						  "name": "점심",
-						  "payerId": %d,
+						  "payerMemberId": %d,
 						  "items": [
 						    { "name": "파스타", "price": 14000, "quantity": 1 }
 						  ]
@@ -234,7 +234,7 @@ class ReceiptCrudControllerTest {
 						""".formatted(manualMember.getId()))
 			)
 			.andExpect(status().isCreated())
-			.andExpect(jsonPath("$.data.payerId").value(manualMember.getId()))
+			.andExpect(jsonPath("$.data.payerMemberId").value(manualMember.getId()))
 			.andExpect(jsonPath("$.data.payerNickname").value("민지"));
 	}
 

@@ -70,7 +70,7 @@ public class RoomService {
 			if (!itemIds.isEmpty()) {
 				assignmentRepository.deleteAllByItemIdIn(itemIds);
 			}
-			receiptIds.forEach(itemRepository::deleteAllByReceiptId);
+			itemRepository.deleteAllByReceiptIdIn(receiptIds);
 			receiptRepository.deleteAllById(receiptIds);
 		}
 
@@ -108,7 +108,7 @@ public class RoomService {
 			throw new ApiException(ErrorCode.VALIDATION_ERROR, "Room owner cannot be deleted.");
 		}
 
-		List<Receipt> payerReceipts = receiptRepository.findAllByRoomIdAndPayerId(roomId, memberId);
+		List<Receipt> payerReceipts = receiptRepository.findAllByRoomIdAndPayerMemberId(roomId, memberId);
 		if (!payerReceipts.isEmpty()) {
 			throw new ApiException(
 				ErrorCode.VALIDATION_ERROR,

@@ -22,10 +22,10 @@ public interface ReceiptRepository extends JpaRepository<Receipt, Long> {
 		select receipt
 		from Receipt receipt
 		where receipt.room.id = :roomId
-		  and receipt.payer.id = :payerId
+		  and receipt.payer.id = :payerMemberId
 		order by receipt.id asc
 		""")
-	List<Receipt> findAllByRoomIdAndPayerId(@Param("roomId") Long roomId, @Param("payerId") Long payerId);
+	List<Receipt> findAllByRoomIdAndPayerMemberId(@Param("roomId") Long roomId, @Param("payerMemberId") Long payerMemberId);
 
 	@Query("""
 		select receipt

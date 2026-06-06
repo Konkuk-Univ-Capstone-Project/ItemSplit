@@ -160,7 +160,7 @@ export function createManualReceipt(
   roomId: number,
   payload: {
     name: string;
-    payerId: number | null;
+    payerMemberId: number | null;
     declaredTotal: number | null;
     purchasedAt: string | null;
     items: Array<{ name: string; price: number; quantity: number }>;
@@ -186,7 +186,7 @@ export function updateReceipt(
   receiptId: number,
   payload: {
     name: string;
-    payerId: number | null;
+    payerMemberId: number | null;
     declaredTotal: number | null;
     purchasedAt: string | null;
   }

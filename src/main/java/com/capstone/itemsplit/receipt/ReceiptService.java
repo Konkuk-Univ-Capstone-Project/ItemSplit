@@ -69,13 +69,13 @@ public class ReceiptService {
 		Long roomId,
 		Long userId,
 		String name,
-		Long payerId,
+		Long payerMemberId,
 		Integer declaredTotal,
 		LocalDate purchasedAt,
 		List<ManualReceiptItemCommand> items
 	) {
 		Room room = roomAuthorizationService.checkMember(roomId, userId);
-		RoomMember payer = resolvePayer(roomId, payerId);
+		RoomMember payer = resolvePayer(roomId, payerMemberId);
 
 		Receipt receipt = receiptRepository.save(Receipt.createManual(room, name.trim(), payer, declaredTotal, purchasedAt));
 		List<Item> savedItems = itemRepository.saveAll(
@@ -112,13 +112,13 @@ public class ReceiptService {
 		Long receiptId,
 		Long userId,
 		String name,
-		Long payerId,
+		Long payerMemberId,
 		Integer declaredTotal,
 		LocalDate purchasedAt
 	) {
 		roomAuthorizationService.checkMember(roomId, userId);
 		Receipt receipt = findReceiptInRoom(roomId, receiptId);
-		RoomMember payer = resolvePayer(roomId, payerId);
+		RoomMember payer = resolvePayer(roomId, payerMemberId);
 		receipt.update(name.trim(), payer, declaredTotal, purchasedAt);
 		List<Item> items = itemRepository.findAllByReceiptId(receiptId);
 		return ReceiptDetailResult.from(receipt, items);
@@ -142,11 +142,11 @@ public class ReceiptService {
 			.orElseThrow(() -> new ApiException(ErrorCode.NOT_FOUND, "Receipt was not found."));
 	}
 
-	private RoomMember resolvePayer(Long roomId, Long payerId) {
-		if (payerId == null) {
+	private RoomMember resolvePayer(Long roomId, Long payerMemberId) {
+		if (payerMemberId == null) {
 			return null;
 		}
-		return roomMemberRepository.findByRoomIdAndIdWithUser(roomId, payerId)
+		return roomMemberRepository.findByRoomIdAndIdWithUser(roomId, payerMemberId)
 			.orElseThrow(() -> new ApiException(ErrorCode.NOT_FOUND, "Payer was not found."));
 	}
 
@@ -180,7 +180,7 @@ public class ReceiptService {
 		Long roomId,
 		String name,
 		ReceiptSourceType sourceType,
-		Long payerId,
+		Long payerMemberId,
 		String payerNickname,
 		Integer declaredTotal,
 		LocalDate purchasedAt,
@@ -208,7 +208,7 @@ public class ReceiptService {
 		Long roomId,
 		String name,
 		ReceiptSourceType sourceType,
-		Long payerId,
+		Long payerMemberId,
 		String payerNickname,
 		Integer declaredTotal,
 		LocalDate purchasedAt,
@@ -281,7 +281,7 @@ public class ReceiptService {
 		Long roomId,
 		String name,
 		ReceiptSourceType sourceType,
-		Long payerId,
+		Long payerMemberId,
 		String payerNickname,
 		Integer declaredTotal,
 		LocalDate purchasedAt,

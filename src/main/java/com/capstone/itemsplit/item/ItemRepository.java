@@ -24,4 +24,8 @@ public interface ItemRepository extends JpaRepository<Item, Long> {
 	@Query("delete from Item i where i.receipt.id = :receiptId")
 	void deleteAllByReceiptId(@Param("receiptId") Long receiptId);
 
+	@Modifying(clearAutomatically = true)
+	@Query("delete from Item i where i.receipt.id in :receiptIds")
+	void deleteAllByReceiptIdIn(@Param("receiptIds") Collection<Long> receiptIds);
+
 }

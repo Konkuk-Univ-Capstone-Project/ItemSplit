@@ -37,7 +37,7 @@ export type ReceiptSummary = {
   roomId: number;
   name: string;
   sourceType: 'MANUAL' | 'IMAGE_UPLOAD';
-  payerId: number | null;
+  payerMemberId: number | null;
   payerNickname: string | null;
   declaredTotal: number | null;
   purchasedAt: string | null;

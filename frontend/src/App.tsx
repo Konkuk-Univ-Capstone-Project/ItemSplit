@@ -1075,7 +1075,7 @@ function ManualReceiptPanel({
   setNotice: (notice: Notice) => void;
 }) {
   const [name, setName] = useState(DEFAULT_RECEIPT_NAME);
-  const [payerId, setPayerId] = useState('');
+  const [payerMemberId, setPayerMemberId] = useState('');
   const [participantIds, setParticipantIds] = useState<number[]>([]);
   const [purchasedAt, setPurchasedAt] = useState(todayInputValue);
   const [items, setItems] = useState<DraftItem[]>(() => cloneDefaultDraftItems());
@@ -1090,14 +1090,14 @@ function ManualReceiptPanel({
   useEffect(() => {
     if (editReceipt) {
       setName(editReceipt.name);
-      setPayerId(editReceipt.payerId !== null ? String(editReceipt.payerId) : '');
+      setPayerMemberId(editReceipt.payerMemberId !== null ? String(editReceipt.payerMemberId) : '');
       setPurchasedAt(editReceipt.purchasedAt?.slice(0, 10) ?? todayInputValue());
       setItems(receiptItemsToDraftItems(editReceipt));
       return;
     }
 
     setName(DEFAULT_RECEIPT_NAME);
-    setPayerId(ownerPayerId !== null ? String(ownerPayerId) : '');
+    setPayerMemberId(ownerPayerId !== null ? String(ownerPayerId) : '');
     setParticipantIds([]);
     setPurchasedAt(todayInputValue());
     setItems(cloneDefaultDraftItems());
@@ -1120,10 +1120,10 @@ function ManualReceiptPanel({
   }, [members]);
 
   useEffect(() => {
-    if (!editReceipt && !payerId && ownerPayerId !== null) {
-      setPayerId(String(ownerPayerId));
+    if (!editReceipt && !payerMemberId && ownerPayerId !== null) {
+      setPayerMemberId(String(ownerPayerId));
     }
-  }, [editReceipt, ownerPayerId, payerId]);
+  }, [editReceipt, ownerPayerId, payerMemberId]);
 
   function updateDraft(index: number, patch: Partial<DraftItem>) {
     setItems((current) => current.map((item, itemIndex) => (itemIndex === index ? { ...item, ...patch } : item)));
@@ -1187,7 +1187,7 @@ function ManualReceiptPanel({
       if (editReceipt) {
         await updateReceipt(token, roomId, editReceipt.receiptId, {
           name: name.trim(),
-          payerId: numberOrNull(payerId),
+          payerMemberId: numberOrNull(payerMemberId),
           declaredTotal: numberOrNull(declaredTotal),
           purchasedAt: purchasedAt || null
         });
@@ -1220,7 +1220,7 @@ function ManualReceiptPanel({
 
       const created = await createManualReceipt(token, roomId, {
         name: name.trim(),
-        payerId: numberOrNull(payerId),
+        payerMemberId: numberOrNull(payerMemberId),
         declaredTotal: numberOrNull(declaredTotal),
         purchasedAt: purchasedAt || null,
         items: nextItems.map((item) => ({
@@ -1269,7 +1269,7 @@ function ManualReceiptPanel({
       </Field>
       <div className="field-row">
         <Field label="결제자">
-          <select value={payerId} onChange={(event) => setPayerId(event.target.value)}>
+          <select value={payerMemberId} onChange={(event) => setPayerMemberId(event.target.value)}>
             <option value="">미지정</option>
             {members.map((member) => (
               <option value={member.memberId} key={member.memberId}>
@@ -1379,13 +1379,13 @@ function ReceiptDetailPanel({
   refreshReceipt: (receiptId?: number | null) => Promise<void>;
   setNotice: (notice: Notice) => void;
 }) {
-  const [editPayerId, setEditPayerId] = useState('');
+  const [editPayerMemberId, setEditPayerMemberId] = useState('');
   const [savingReceiptMeta, setSavingReceiptMeta] = useState(false);
   const [savingAssigneeItemId, setSavingAssigneeItemId] = useState<number | null>(null);
 
   useEffect(() => {
-    setEditPayerId(receipt?.payerId !== null && receipt?.payerId !== undefined ? String(receipt.payerId) : '');
-  }, [receipt?.receiptId, receipt?.payerId]);
+    setEditPayerMemberId(receipt?.payerMemberId !== null && receipt?.payerMemberId !== undefined ? String(receipt.payerMemberId) : '');
+  }, [receipt?.receiptId, receipt?.payerMemberId]);
 
   if (!receipt) {
     return (
@@ -1400,16 +1400,16 @@ function ReceiptDetailPanel({
   const itemTotal = currentReceipt.items.reduce((sum, item) => sum + item.price * item.quantity, 0);
   const payerMembers = members;
   const currentPayerInMembers =
-    currentReceipt.payerId === null || payerMembers.some((member) => member.memberId === currentReceipt.payerId);
+    currentReceipt.payerMemberId === null || payerMembers.some((member) => member.memberId === currentReceipt.payerMemberId);
 
-  async function handleUpdateReceiptPayer(nextPayerId: string) {
-    setEditPayerId(nextPayerId);
+  async function handleUpdateReceiptPayer(nextPayerMemberId: string) {
+    setEditPayerMemberId(nextPayerMemberId);
     setSavingReceiptMeta(true);
     setNotice(null);
     try {
       await updateReceipt(token, roomId, currentReceipt.receiptId, {
         name: currentReceipt.name,
-        payerId: numberOrNull(nextPayerId),
+        payerMemberId: numberOrNull(nextPayerMemberId),
         declaredTotal: currentReceipt.declaredTotal,
         purchasedAt: currentReceipt.purchasedAt
       });
@@ -1417,7 +1417,7 @@ function ReceiptDetailPanel({
       await refreshRoom();
       setNotice({ kind: 'success', text: '결제자를 수정했습니다.' });
     } catch (error) {
-      setEditPayerId(currentReceipt.payerId !== null ? String(currentReceipt.payerId) : '');
+      setEditPayerMemberId(currentReceipt.payerMemberId !== null ? String(currentReceipt.payerMemberId) : '');
       setNotice({ kind: 'error', text: error instanceof Error ? error.message : '결제자 수정에 실패했습니다.' });
     } finally {
       setSavingReceiptMeta(false);
@@ -1466,13 +1466,13 @@ function ReceiptDetailPanel({
       <div className="receipt-meta-form">
         <Field label="결제자">
           <select
-            value={editPayerId}
+            value={editPayerMemberId}
             onChange={(event) => handleUpdateReceiptPayer(event.target.value)}
             disabled={savingReceiptMeta}
           >
             <option value="">미지정</option>
-            {!currentPayerInMembers && currentReceipt.payerId !== null && (
-              <option value={currentReceipt.payerId}>{currentReceipt.payerNickname ?? '이전 결제자'}</option>
+            {!currentPayerInMembers && currentReceipt.payerMemberId !== null && (
+              <option value={currentReceipt.payerMemberId}>{currentReceipt.payerNickname ?? '이전 결제자'}</option>
             )}
             {payerMembers.map((member) => (
               <option value={member.memberId} key={member.memberId}>

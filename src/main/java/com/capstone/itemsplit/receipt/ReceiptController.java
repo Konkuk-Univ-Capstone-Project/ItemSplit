@@ -51,7 +51,7 @@ public class ReceiptController {
 					r.roomId(),
 					r.name(),
 					r.sourceType(),
-					r.payerId(),
+					r.payerMemberId(),
 					r.payerNickname(),
 					r.declaredTotal(),
 					r.purchasedAt(),
@@ -106,7 +106,7 @@ public class ReceiptController {
 			roomId,
 			userId,
 			request.name(),
-			request.payerId(),
+			request.payerMemberId(),
 			request.declaredTotal(),
 			request.purchasedAt(),
 			request.items().stream()
@@ -124,7 +124,7 @@ public class ReceiptController {
 				result.roomId(),
 				result.name(),
 				result.sourceType(),
-				result.payerId(),
+				result.payerMemberId(),
 				result.payerNickname(),
 				result.declaredTotal(),
 				result.purchasedAt(),
@@ -152,7 +152,7 @@ public class ReceiptController {
 			receiptId,
 			userId,
 			request.name(),
-			request.payerId(),
+			request.payerMemberId(),
 			request.declaredTotal(),
 			request.purchasedAt()
 		);
@@ -176,7 +176,7 @@ public class ReceiptController {
 			result.roomId(),
 			result.name(),
 			result.sourceType(),
-			result.payerId(),
+			result.payerMemberId(),
 			result.payerNickname(),
 			result.declaredTotal(),
 			result.purchasedAt(),
@@ -206,7 +206,7 @@ public class ReceiptController {
 		Long roomId,
 		String name,
 		ReceiptSourceType sourceType,
-		Long payerId,
+		Long payerMemberId,
 		String payerNickname,
 		Integer declaredTotal,
 		LocalDate purchasedAt,
@@ -219,7 +219,7 @@ public class ReceiptController {
 		Long roomId,
 		String name,
 		ReceiptSourceType sourceType,
-		Long payerId,
+		Long payerMemberId,
 		String payerNickname,
 		Integer declaredTotal,
 		LocalDate purchasedAt,
@@ -253,7 +253,7 @@ public class ReceiptController {
 		@NotBlank(message = "name must not be blank")
 		@Size(max = 100, message = "name must be 100 characters or fewer")
 		String name,
-		Long payerId,
+		Long payerMemberId,
 		Integer declaredTotal,
 		LocalDate purchasedAt,
 		@NotEmpty(message = "items must not be empty")
@@ -279,7 +279,7 @@ public class ReceiptController {
 		Long roomId,
 		String name,
 		ReceiptSourceType sourceType,
-		Long payerId,
+		Long payerMemberId,
 		String payerNickname,
 		Integer declaredTotal,
 		LocalDate purchasedAt,
@@ -299,7 +299,7 @@ public class ReceiptController {
 		@NotBlank(message = "name must not be blank")
 		@Size(max = 100, message = "name must be 100 characters or fewer")
 		String name,
-		Long payerId,
+		Long payerMemberId,
 		Integer declaredTotal,
 		LocalDate purchasedAt
 	) {
