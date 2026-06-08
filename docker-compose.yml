@@ -1,6 +1,5 @@
 services:
   app:
-    profiles: ["demo"]
     build: .
     container_name: itemsplit-api
     restart: unless-stopped
@@ -27,7 +26,6 @@ services:
       - itemsplit-storage:/app/storage
 
   frontend:
-    profiles: ["demo"]
     build:
       context: ./frontend
     container_name: itemsplit-frontend

@@ -14,21 +14,21 @@ ItemSplit은 모임/회식 지출을 영수증 단위로 등록하고, 품목별
 - `RoomMember` 기준 결제자/참여자/정산 계산
 - 멤버별 부담액/결제액/net과 송금 흐름 조회
 - 읽기 전용 공유 토큰을 통한 인증 없는 정산 결과 조회
-- React 대시보드와 Docker Compose demo profile 실행 환경
+- React 대시보드와 Docker Compose 기반 전체 실행 환경
 
 ## 기술 스택
 
 - Backend: Java 21, Spring Boot 3.5, Spring Security, Spring Data JPA, PostgreSQL
 - Frontend: React 19, TypeScript, Vite, lucide-react
 - Test: JUnit 5, Spring Boot Test, Testcontainers, H2
-- Runtime: Docker, Docker Compose, Nginx(frontend demo)
+- Runtime: Docker, Docker Compose, Nginx(frontend Docker)
 
-## 데모 Docker 실행
+## Docker 실행
 
-백엔드, 프론트엔드, DB를 함께 띄우는 데모 환경은 `demo` profile을 사용합니다.
+백엔드, 프론트엔드, DB를 함께 띄웁니다.
 
 ```bash
-docker compose --profile demo up -d --build
+docker compose up -d --build
 ```
 
 기본 API 포트는 `8080`, 프론트엔드 포트는 `3000`입니다. 필요하면 `.env`에 `APP_PORT=18080`, `FRONTEND_PORT=13000`처럼 지정할 수 있습니다.
@@ -37,16 +37,16 @@ docker compose --profile demo up -d --build
 open http://localhost:3000
 ```
 
-데모 Docker 종료
+Docker 종료
 
 ```bash
-docker compose --profile demo down
+docker compose down
 ```
 
-데모 Docker 종료 및 볼륨 삭제
+Docker 종료 및 볼륨 삭제
 
 ```bash
-docker compose --profile demo down -v
+docker compose down -v
 ```
 
 ## 로컬 실행
