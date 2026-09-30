@@ -9,3 +9,7 @@ spring:
   jpa:
     hibernate:
       ddl-auto: update
+    properties:
+      hibernate:
+        hbm2ddl:
+          halt_on_error: true
