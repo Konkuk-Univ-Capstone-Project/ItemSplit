@@ -3,6 +3,7 @@ package com.capstone.itemsplit.room;
 import com.capstone.itemsplit.common.exception.ApiException;
 import com.capstone.itemsplit.common.exception.ErrorCode;
 import java.time.LocalDateTime;
+import com.capstone.itemsplit.settlement.SettlementService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -17,10 +18,12 @@ public class RoomShareService {
 	private final RoomShareTokenRepository roomShareTokenRepository;
 	private final InviteTokenGenerator inviteTokenGenerator;
 	private final RoomAuthorizationService roomAuthorizationService;
+	private final SettlementService settlementService;
 
 	@Transactional
 	public ShareTokenResult issueShareToken(Long roomId, Long userId) {
-		Room room = roomAuthorizationService.checkMember(roomId, userId);
+		Room room = roomAuthorizationService.checkMemberForUpdate(roomId, userId);
+		settlementService.calculateShared(room);
 		String token = generateUniqueToken();
 		LocalDateTime expiresAt = LocalDateTime.now().plusDays(SHARE_TOKEN_EXPIRATION_DAYS);
 

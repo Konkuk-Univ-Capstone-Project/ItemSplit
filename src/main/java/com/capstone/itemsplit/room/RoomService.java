@@ -7,6 +7,7 @@ import com.capstone.itemsplit.item.Item;
 import com.capstone.itemsplit.item.ItemRepository;
 import com.capstone.itemsplit.receipt.Receipt;
 import com.capstone.itemsplit.receipt.ReceiptRepository;
+import com.capstone.itemsplit.storage.StorageCleanupService;
 import com.capstone.itemsplit.user.User;
 import com.capstone.itemsplit.user.UserService;
 import java.time.LocalDateTime;
@@ -27,6 +28,7 @@ public class RoomService {
 	private final AssignmentRepository assignmentRepository;
 	private final ItemRepository itemRepository;
 	private final ReceiptRepository receiptRepository;
+	private final StorageCleanupService storageCleanupService;
 	private final RoomInviteTokenRepository roomInviteTokenRepository;
 	private final RoomShareTokenRepository roomShareTokenRepository;
 	private final UserService userService;
@@ -54,13 +56,15 @@ public class RoomService {
 
 	@Transactional
 	public void deleteRoom(Long roomId, Long userId) {
-		Room room = roomRepository.findById(roomId)
+		Room room = roomRepository.findByIdForUpdate(roomId)
 			.orElseThrow(() -> new ApiException(ErrorCode.NOT_FOUND, "Room was not found."));
 		if (!room.getOwner().getId().equals(userId)) {
 			throw new ApiException(ErrorCode.FORBIDDEN, "Only room owner can delete this room.");
 		}
 
-		List<Long> receiptIds = receiptRepository.findAllByRoomId(roomId).stream()
+		List<Receipt> receipts = receiptRepository.findAllByRoomId(roomId);
+		receipts.forEach(receipt -> storageCleanupService.deleteAfterCommit(receipt.getStoredPath()));
+		List<Long> receiptIds = receipts.stream()
 			.map(Receipt::getId)
 			.toList();
 		if (!receiptIds.isEmpty()) {
@@ -99,7 +103,7 @@ public class RoomService {
 
 	@Transactional
 	public void deleteMember(Long roomId, Long memberId, Long userId) {
-		Room room = roomAuthorizationService.checkMember(roomId, userId);
+		Room room = roomAuthorizationService.checkMemberForUpdate(roomId, userId);
 		RoomMember roomMember = roomMemberRepository.findByRoomIdAndIdWithUser(roomId, memberId)
 			.orElseThrow(() -> new ApiException(ErrorCode.NOT_FOUND, "Member was not found in this room."));
 

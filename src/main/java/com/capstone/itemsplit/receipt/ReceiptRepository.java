@@ -8,6 +8,8 @@ import org.springframework.data.repository.query.Param;
 
 public interface ReceiptRepository extends JpaRepository<Receipt, Long> {
 
+	Optional<Receipt> findByRoomIdAndRequestId(Long roomId, String requestId);
+
 	@Query("""
 		select receipt
 		from Receipt receipt

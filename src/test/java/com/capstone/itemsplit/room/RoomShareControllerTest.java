@@ -196,10 +196,32 @@ class RoomShareControllerTest {
 			.andExpect(jsonPath("$.error.message").value("Share token is invalid or expired."));
 	}
 
+	@Test
+	void incompleteReceiptCannotIssueShareToken() throws Exception {
+		User owner = createUser("owner@example.com", "owner");
+		Room room = createRoomWithMember(owner);
+		receiptRepository.save(Receipt.createManual(room, "미완성", null, null, null));
+		mockMvc.perform(post("/api/rooms/{roomId}/share-token", room.getId())
+				.header(HttpHeaders.AUTHORIZATION, bearer(owner)))
+			.andExpect(status().isBadRequest())
+			.andExpect(jsonPath("$.error.code").value("VALIDATION_ERROR"));
+	}
+
+	@Test
+	void existingShareTokenCannotExposeIncompleteSettlement() throws Exception {
+		User owner = createUser("owner@example.com", "owner");
+		Room room = createRoomWithMember(owner);
+		roomShareTokenRepository.save(RoomShareToken.create(room, "existing", LocalDateTime.now().plusDays(1)));
+		receiptRepository.save(Receipt.createManual(room, "미완성", null, null, null));
+		mockMvc.perform(get("/api/shared/rooms/{token}/settlements", "existing"))
+			.andExpect(status().isBadRequest())
+			.andExpect(jsonPath("$.error.code").value("VALIDATION_ERROR"));
+	}
+
 	private void createSettlementFixture(Room room, User owner, User member) {
 		RoomMember ownerMember = roomMemberRepository.findByRoomIdAndUserId(room.getId(), owner.getId()).orElseThrow();
 		RoomMember memberMember = roomMemberRepository.findByRoomIdAndUserId(room.getId(), member.getId()).orElseThrow();
-		Receipt receipt = receiptRepository.save(Receipt.createManual(room, "Cafe", ownerMember, null, null));
+		Receipt receipt = receiptRepository.save(Receipt.createManual(room, "Cafe", ownerMember, 10000L, null));
 		Item coffee = itemRepository.save(Item.create(receipt, "Coffee", 10000, 1));
 		assignmentRepository.save(Assignment.create(coffee, ownerMember));
 		assignmentRepository.save(Assignment.create(coffee, memberMember));

@@ -120,7 +120,7 @@ class ReceiptCrudControllerTest {
 		User owner = createUser("owner@example.com", "owner");
 		Room room = roomRepository.save(Room.create("Capstone Team", owner));
 		roomMemberRepository.save(RoomMember.create(room, owner));
-		Receipt receipt = receiptRepository.save(Receipt.createManual(room, "카페", null, 99999, null));
+		Receipt receipt = receiptRepository.save(Receipt.createManual(room, "카페", null, 99999L, null));
 		itemRepository.save(Item.create(receipt, "아메리카노", 4500, 2));
 
 		mockMvc
@@ -147,6 +147,7 @@ class ReceiptCrudControllerTest {
 					.contentType(MediaType.APPLICATION_JSON)
 					.content("""
 						{
+						  "requestId": "legacy-test-request",
 						  "name": "스타벅스",
 						  "payerMemberId": %d,
 						  "declaredTotal": 9000
@@ -195,11 +196,12 @@ class ReceiptCrudControllerTest {
 					.contentType(MediaType.APPLICATION_JSON)
 					.content("""
 						{
+						  "requestId": "legacy-test-request",
 						  "name": "카페",
 						  "payerMemberId": %d,
 						  "declaredTotal": 9000,
 						  "items": [
-						    { "name": "아메리카노", "price": 4500, "quantity": 2 }
+						    { "name": "아메리카노", "price": 4500, "quantity": 2, "memberIds": [], "excludedFromSettlement": false }
 						  ]
 						}
 						""".formatted(ownerMember.getId()))
@@ -225,10 +227,11 @@ class ReceiptCrudControllerTest {
 					.contentType(MediaType.APPLICATION_JSON)
 					.content("""
 						{
+						  "requestId": "legacy-test-request",
 						  "name": "점심",
 						  "payerMemberId": %d,
 						  "items": [
-						    { "name": "파스타", "price": 14000, "quantity": 1 }
+						    { "name": "파스타", "price": 14000, "quantity": 1, "memberIds": [], "excludedFromSettlement": false }
 						  ]
 						}
 						""".formatted(manualMember.getId()))
