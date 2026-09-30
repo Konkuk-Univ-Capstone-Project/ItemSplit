@@ -2,6 +2,8 @@ import type {
   ApiEnvelope,
   AssigneesResult,
   AuthSession,
+  ItemWriteRequest,
+  ItemWriteResult,
   ReceiptDetail,
   ReceiptItem,
   ReceiptSummary,
@@ -163,7 +165,8 @@ export function createManualReceipt(
     payerMemberId: number | null;
     declaredTotal: number | null;
     purchasedAt: string | null;
-    items: Array<{ name: string; price: number; quantity: number }>;
+    requestId: string;
+    items: Array<Omit<ReceiptItem, 'itemId'>>;
   }
 ) {
   return request<ReceiptDetail>(`/api/rooms/${roomId}/receipts/manual`, {
@@ -198,11 +201,28 @@ export function updateReceipt(
   });
 }
 
-export function addItem(token: string, roomId: number, receiptId: number, item: Omit<ReceiptItem, 'itemId'>) {
-  return request<ReceiptItem>(`/api/rooms/${roomId}/receipts/${receiptId}/items`, {
+export function updateReceiptContents(
+  token: string,
+  roomId: number,
+  receiptId: number,
+  payload: {
+    name: string;
+    payerMemberId: number | null;
+    declaredTotal: number | null;
+    purchasedAt: string | null;
+    items: Array<Omit<ReceiptItem, 'itemId'> & { itemId: number | null }>;
+  }
+) {
+  return request<ReceiptDetail>(`/api/rooms/${roomId}/receipts/${receiptId}/contents`, {
+    method: 'PUT', token, body: JSON.stringify(payload)
+  });
+}
+
+export function addItem(token: string, roomId: number, receiptId: number, item: ItemWriteRequest) {
+  return request<ItemWriteResult>(`/api/rooms/${roomId}/receipts/${receiptId}/items`, {
     method: 'POST',
     token,
-    body: JSON.stringify(item)
+    body: JSON.stringify({ name: item.name, price: item.price, quantity: item.quantity })
   });
 }
 
@@ -211,12 +231,12 @@ export function updateItem(
   roomId: number,
   receiptId: number,
   itemId: number,
-  item: Omit<ReceiptItem, 'itemId'>
+  item: ItemWriteRequest
 ) {
-  return request<ReceiptItem>(`/api/rooms/${roomId}/receipts/${receiptId}/items/${itemId}`, {
+  return request<ItemWriteResult>(`/api/rooms/${roomId}/receipts/${receiptId}/items/${itemId}`, {
     method: 'PUT',
     token,
-    body: JSON.stringify(item)
+    body: JSON.stringify({ name: item.name, price: item.price, quantity: item.quantity })
   });
 }
 
