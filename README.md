@@ -25,7 +25,7 @@ ItemSplit은 모임/회식 지출을 영수증 단위로 등록하고, 품목별
 
 ## Docker 실행
 
-백엔드, 프론트엔드, DB를 함께 띄웁니다.
+백엔드, 프론트엔드, DB를 함께 띄웁니다. **기존 DB 볼륨을 사용한다면 먼저 아래 [기존 DB 변경 적용](#기존-db-변경-적용)을 완료한 뒤 실행합니다.** 빈 DB는 첫 실행 시 Hibernate가 테이블을 생성합니다.
 
 ```bash
 docker compose up -d --build
@@ -43,7 +43,7 @@ Docker 종료
 docker compose down
 ```
 
-Docker 종료 및 볼륨 삭제
+Docker 종료 및 볼륨 삭제 — DB와 업로드 이미지가 삭제됩니다. 데이터가 필요 없는 경우에만 실행합니다.
 
 ```bash
 docker compose down -v
@@ -85,13 +85,15 @@ docker compose ps
 docker compose down
 ```
 
-로컬 Docker 종료 및 볼륨 삭제
+로컬 Docker 종료 및 볼륨 삭제 — DB와 업로드 이미지가 삭제됩니다. 데이터가 필요 없는 경우에만 실행합니다.
 
 ```bash
 docker compose down -v
 ```
 
 ### 3. 백엔드 실행
+
+기존 DB가 있으면 먼저 [기존 DB 변경 적용](#기존-db-변경-적용)을 수행합니다.
 
 macOS
 
@@ -105,7 +107,7 @@ Windows
 gradlew.bat bootRun
 ```
 
-기본 프로파일은 `local`이며, 로컬 DB 접속 정보는 `.env` 또는 기본값을 사용합니다.
+기본 프로파일은 `local`입니다. Compose는 `.env`를 읽지만, `bootRun`은 셸 환경 변수 또는 기본 DB 접속값을 사용합니다. `.env`의 DB 설정을 변경했다면 같은 `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`를 실행 환경에도 설정합니다.
 
 ### 4. 프론트엔드 실행
 
@@ -133,11 +135,46 @@ curl.exe http://localhost:8080/actuator/health
 
 정상 실행 시 `{"status":"UP"}` 응답을 확인할 수 있습니다.
 
+## 기존 DB 변경 적용
+
+기존 데이터를 보존하는 기본 절차는 **앱 중지 → 백업 → SQL 적용 → 앱 실행**입니다. 로컬의 `ddl-auto=update`도 이 절차를 대체하지 않습니다. 공통 명세 적용 이전 DB나 Hibernate가 일부 컬럼만 추가한 DB 모두 아래 스크립트를 사용합니다. 성공한 DB에 재실행해도 기존 값은 유지됩니다.
+
+1. IDE/`bootRun`으로 실행 중인 백엔드를 종료합니다. Compose 백엔드도 중지하고 DB만 준비합니다.
+
+```bash
+docker compose stop app
+docker compose up -d --wait postgres
+```
+
+2. DB를 백업합니다. 아래 예시는 macOS/Linux 셸 기준이며, 백업 파일을 Git에 추가하지 않습니다.
+
+```bash
+docker compose exec -T postgres sh -c 'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Fc -f /tmp/itemsplit-before-common-contract.dump'
+docker compose cp postgres:/tmp/itemsplit-before-common-contract.dump /tmp/itemsplit-before-common-contract.dump
+```
+
+백업 파일은 `/tmp`에서 별도 보관 위치로 옮겨 둡니다. 재실행 전에 이전 백업을 보관하여 덮어쓰지 않도록 합니다. Windows에서는 마지막 경로를 원하는 로컬 백업 경로로 바꿉니다.
+
+3. 저장소 루트에서 SQL을 복사하고 실행합니다. 아래 명령은 PowerShell에서도 사용할 수 있습니다.
+
+```bash
+docker compose cp db/migrations/001_common_contract.sql postgres:/tmp/001_common_contract.sql
+docker compose exec -T postgres sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 -f /tmp/001_common_contract.sql'
+```
+
+`COMMIT`과 정상 종료를 확인한 뒤 로컬은 `./gradlew bootRun`, Docker는 `docker compose up -d --build`로 시작합니다. 오류가 나면 앱을 시작하지 말고 원인을 해결합니다. SQL은 한 트랜잭션으로 실행되어 중간 실패 시 전체 변경이 취소됩니다.
+
+스크립트는 금액 컬럼을 `BIGINT`로 맞추고, 기존 품목의 제외 여부가 없거나 `NULL`인 경우 `false`로 채운 뒤 기본값과 `NOT NULL`을 적용합니다. 명시적으로 제외된 품목과 기존 요청 식별자는 보존합니다. 기존 금액 오류는 자동 보정하지 않으며 `db/migrations/001_common_contract_audit.sql`로 점검합니다.
+
+빈 DB에는 이 스크립트를 먼저 실행하지 않습니다. 테이블 생성은 Hibernate가 담당합니다. 데이터가 불필요한 개발 DB만 선택적으로 볼륨을 초기화할 수 있으며, 일반 업데이트에는 볼륨 삭제가 필요하지 않습니다.
+
 ## 테스트
 
 ```bash
 ./gradlew test
 ```
+
+PostgreSQL 마이그레이션 회귀 테스트는 Docker가 켜져 있으면 격리된 `postgres:16-alpine` 컨테이너에서 실행됩니다. Docker가 없으면 해당 테스트는 건너뜁니다. 마이그레이션 변경을 검증할 때는 Docker를 켜고 `CommonContractMigrationTest`가 건너뛰어지지 않았는지 확인합니다.
 
 프론트엔드 타입 검사와 빌드는 아래 명령으로 실행합니다.
 
@@ -152,7 +189,8 @@ npm run build
 
 - 기본 프로파일입니다.
 - PostgreSQL에 연결합니다.
-- `spring.jpa.hibernate.ddl-auto=update`로 동작합니다.
+- `spring.jpa.hibernate.ddl-auto=update`로 동작합니다. 기존 DB는 먼저 변경 SQL을 적용합니다.
+- 스키마 변경 오류가 발생하면 `hibernate.hbm2ddl.halt_on_error=true` 설정으로 앱 시작을 중단합니다.
 
 ### prod profile
 
@@ -219,7 +257,7 @@ npm run build
 - 1원 단위 나머지는 `roomId`와 `itemId` 기반의 고정 seed로 참여자에게 분배해 조회마다 같은 결과를 보장합니다.
 - 결제액은 영수증의 결제자로 지정된 멤버에게 합산됩니다.
 - `net = paid - burden`이며, 양수면 받을 금액, 음수면 보낼 금액입니다.
-- 참여자가 지정되지 않은 품목은 정산에서 제외됩니다.
+- 명시적으로 제외한 품목만 정산에서 제외됩니다. 제외하지 않은 미배정 품목이나 총액 불일치가 있으면 수정 후 정산할 수 있습니다.
 
 ## 프로젝트 구조
 

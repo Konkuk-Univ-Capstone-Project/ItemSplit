@@ -16,12 +16,13 @@ import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
+import jakarta.persistence.UniqueConstraint;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
 @Entity
-@Table(name = "receipts")
+@Table(name = "receipts", uniqueConstraints = @UniqueConstraint(name = "uk_receipt_room_request", columnNames = {"room_id", "request_id"}))
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class Receipt {
@@ -53,7 +54,18 @@ public class Receipt {
     @JoinColumn(name = "payer_member_id")
     private RoomMember payer;
 
-    private Integer declaredTotal;
+    private Long declaredTotal;
+
+    @Column(name = "request_id", length = 64)
+    private String requestId;
+
+    @Column(length = 64)
+    private String requestFingerprint;
+
+    public void identifyCreation(String requestId, String fingerprint) {
+        this.requestId = requestId;
+        this.requestFingerprint = fingerprint;
+    }
 
     private LocalDate purchasedAt;
 
@@ -97,7 +109,7 @@ public class Receipt {
         );
     }
 
-    public static Receipt createManual(Room room, String name, RoomMember payer, Integer declaredTotal, LocalDate purchasedAt) {
+    public static Receipt createManual(Room room, String name, RoomMember payer, Long declaredTotal, LocalDate purchasedAt) {
         Receipt receipt = new Receipt(room, name, ReceiptSourceType.MANUAL, null, null, null, null);
         receipt.payer = payer;
         receipt.declaredTotal = declaredTotal;
@@ -105,7 +117,7 @@ public class Receipt {
         return receipt;
     }
 
-    public void update(String name, RoomMember payer, Integer declaredTotal, LocalDate purchasedAt) {
+    public void update(String name, RoomMember payer, Long declaredTotal, LocalDate purchasedAt) {
         this.name = name;
         this.payer = payer;
         this.declaredTotal = declaredTotal;

@@ -3,6 +3,9 @@ spring:
     name: itemsplit
   profiles:
     default: local
+  jackson:
+    deserialization:
+      accept-float-as-int: false
   jpa:
     open-in-view: false
 

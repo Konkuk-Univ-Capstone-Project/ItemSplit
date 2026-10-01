@@ -41,7 +41,7 @@ public class SettlementController {
 				m.net()
 			))
 			.toList();
-		return new SettlementResponse(result.roomId(), result.roomName(), members);
+		return new SettlementResponse(result.roomId(), result.roomName(), members, result.ready(), result.issues());
 	}
 
 	private Long requireAuthenticatedUser(AuthenticatedUser authenticatedUser) {
@@ -54,7 +54,9 @@ public class SettlementController {
 	public record SettlementResponse(
 		Long roomId,
 		String roomName,
-		List<MemberSettlementResponse> members
+		List<MemberSettlementResponse> members,
+		boolean ready,
+		List<SettlementService.SettlementIssue> issues
 	) {
 	}
 

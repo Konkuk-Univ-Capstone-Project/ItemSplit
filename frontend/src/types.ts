@@ -49,6 +49,14 @@ export type ReceiptItem = {
   name: string;
   price: number;
   quantity: number;
+  memberIds: number[];
+  excludedFromSettlement: boolean;
+};
+
+export type ItemWriteRequest = Pick<ReceiptItem, 'name' | 'price' | 'quantity'>;
+
+export type ItemWriteResult = Omit<ReceiptItem, 'memberIds'> & {
+  receiptId: number;
 };
 
 export type ReceiptDetail = ReceiptSummary & {
@@ -70,9 +78,11 @@ export type Settlement = {
   roomId: number;
   roomName: string;
   members: SettlementMember[];
+  ready: boolean;
+  issues: Array<{ code: string; receiptId: number; itemId: number | null; message: string }>;
 };
 
-export type SharedSettlement = Settlement & {
+export type SharedSettlement = Omit<Settlement, 'ready' | 'issues'> & {
   shareExpiresAt: string;
   readOnly: boolean;
 };

@@ -6,6 +6,7 @@ import com.capstone.itemsplit.common.exception.ErrorCode;
 import com.capstone.itemsplit.common.response.ApiResponse;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
@@ -95,9 +96,11 @@ public class ItemController {
 		String name,
 		@NotNull(message = "price must not be null")
 		@Positive(message = "price must be greater than 0")
-		Integer price,
+		@Max(1_000_000)
+		Long price,
 		@NotNull(message = "quantity must not be null")
 		@Positive(message = "quantity must be greater than 0")
+		@Max(999)
 		Integer quantity
 	) {
 	}
@@ -108,9 +111,11 @@ public class ItemController {
 		String name,
 		@NotNull(message = "price must not be null")
 		@Positive(message = "price must be greater than 0")
-		Integer price,
+		@Max(1_000_000)
+		Long price,
 		@NotNull(message = "quantity must not be null")
 		@Positive(message = "quantity must be greater than 0")
+		@Max(999)
 		Integer quantity
 	) {
 	}
@@ -119,8 +124,9 @@ public class ItemController {
 		Long itemId,
 		Long receiptId,
 		String name,
-		int price,
-		int quantity
+		long price,
+		int quantity,
+		boolean excludedFromSettlement
 	) {
 
 		private static ItemResponse from(ItemService.ItemResult result) {
@@ -129,7 +135,8 @@ public class ItemController {
 				result.receiptId(),
 				result.name(),
 				result.price(),
-				result.quantity()
+				result.quantity(),
+				result.excludedFromSettlement()
 			);
 		}
 

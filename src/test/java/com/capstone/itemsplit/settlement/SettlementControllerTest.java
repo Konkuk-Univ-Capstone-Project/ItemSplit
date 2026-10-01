@@ -79,7 +79,7 @@ class SettlementControllerTest {
 		RoomMember ownerMember = roomMemberRepository.save(RoomMember.create(room, owner));
 		RoomMember memberMember = roomMemberRepository.save(RoomMember.create(room, member));
 
-		Receipt receipt = receiptRepository.save(Receipt.createManual(room, "저녁식사", ownerMember, null, null));
+		Receipt receipt = receiptRepository.save(Receipt.createManual(room, "저녁식사", ownerMember, 45000L, null));
 		// 삼겹살 30000원 — owner, member 둘 다 참여 → 각 15000
 		Item pork = itemRepository.save(Item.create(receipt, "삼겹살", 30000, 1));
 		// 소주 15000원 — owner만 참여 → owner 15000
@@ -107,7 +107,7 @@ class SettlementControllerTest {
 		RoomMember memberMember = roomMemberRepository.save(RoomMember.create(room, member));
 
 		// owner가 결제자, 10000원 품목을 둘이 N빵
-		Receipt receipt = receiptRepository.save(Receipt.createManual(room, "카페", ownerMember, null, null));
+		Receipt receipt = receiptRepository.save(Receipt.createManual(room, "카페", ownerMember, 10000L, null));
 		Item coffee = itemRepository.save(Item.create(receipt, "아메리카노", 10000, 1));
 		assignmentRepository.save(Assignment.create(coffee, ownerMember));
 		assignmentRepository.save(Assignment.create(coffee, memberMember));
@@ -125,8 +125,8 @@ class SettlementControllerTest {
 	}
 
 	@Test
-	@DisplayName("배정 없는 품목은 정산에서 제외된다")
-	void 배정_없는_품목은_정산에서_제외된다() throws Exception {
+	@DisplayName("배정 없는 품목은 정산을 차단한다")
+	void 배정_없는_품목은_정산을_차단한다() throws Exception {
 		User owner = createUser("owner@test.com", "owner");
 		Room room = roomRepository.save(Room.create("room", owner));
 		RoomMember ownerMember = roomMemberRepository.save(RoomMember.create(room, owner));
@@ -137,7 +137,9 @@ class SettlementControllerTest {
 		mockMvc.perform(get("/api/rooms/{roomId}/settlements", room.getId())
 				.header(HttpHeaders.AUTHORIZATION, bearer(owner)))
 			.andExpect(status().isOk())
-			.andExpect(jsonPath("$.data.members[?(@.nickname=='owner')].burden").value(0));
+			.andExpect(jsonPath("$.data.ready").value(false))
+			.andExpect(jsonPath("$.data.members").isEmpty())
+			.andExpect(jsonPath("$.data.issues[*].code", org.hamcrest.Matchers.hasItems("MISSING_DECLARED_TOTAL", "MISSING_PAYER", "MISSING_ASSIGNEES")));
 	}
 
 	@Test
@@ -147,7 +149,7 @@ class SettlementControllerTest {
 		Room room = roomRepository.save(Room.create("room", owner));
 		RoomMember ownerMember = roomMemberRepository.save(RoomMember.create(room, owner));
 
-		Receipt receipt = receiptRepository.save(Receipt.createManual(room, "카페", null, null, null));
+		Receipt receipt = receiptRepository.save(Receipt.createManual(room, "카페", ownerMember, 4500L, null));
 		Item item = itemRepository.save(Item.create(receipt, "아메리카노", 4500, 1));
 		assignmentRepository.save(Assignment.create(item, ownerMember));
 
@@ -169,7 +171,7 @@ class SettlementControllerTest {
 		RoomMember bMember = roomMemberRepository.save(RoomMember.create(room, b));
 
 		// 10000원을 3명이 나누면 3333 * 3 = 9999, 나머지 1원은 seeded random으로 참여자 중 1명에게
-		Receipt receipt = receiptRepository.save(Receipt.createManual(room, "식사", null, null, null));
+		Receipt receipt = receiptRepository.save(Receipt.createManual(room, "식사", ownerMember, 10000L, null));
 		Item item = itemRepository.save(Item.create(receipt, "찌개", 10000, 1));
 		assignmentRepository.save(Assignment.create(item, ownerMember));
 		assignmentRepository.save(Assignment.create(item, aMember));
@@ -182,17 +184,25 @@ class SettlementControllerTest {
 			.andExpect(jsonPath("$.data.members[?(@.nickname=='owner')].burden").isArray())
 			.andExpect(jsonPath("$.data.members[?(@.nickname=='a')].burden").isArray())
 			.andExpect(jsonPath("$.data.members[?(@.nickname=='b')].burden").isArray())
-			// 각자 3333 또는 3334 (합계 검증은 아래 custom matcher 대신 최소 합으로 대체)
+			// 각자 3333 또는 3334이며 부담·결제 합계와 순정산액을 함께 검증한다.
 			.andExpect(result -> {
 				com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
 				var body = mapper.readTree(result.getResponse().getContentAsString());
 				long total = 0;
 				for (var m : body.at("/data/members")) {
 					long burden = m.get("burden").asLong();
-					assert burden == 3333 || burden == 3334 : "burden should be 3333 or 3334, was " + burden;
+					org.assertj.core.api.Assertions.assertThat(burden).isIn(3333L, 3334L);
 					total += burden;
 				}
-				assert total == 10000 : "total burden should be 10000, was " + total;
+				org.assertj.core.api.Assertions.assertThat(total).isEqualTo(10000L);
+				long paid = 0;
+				long net = 0;
+				for (var m : body.at("/data/members")) {
+					paid += m.get("paid").asLong();
+					net += m.get("net").asLong();
+				}
+				org.assertj.core.api.Assertions.assertThat(paid).isEqualTo(total);
+				org.assertj.core.api.Assertions.assertThat(net).isZero();
 			});
 	}
 
@@ -220,6 +230,114 @@ class SettlementControllerTest {
 		mockMvc.perform(get("/api/rooms/{roomId}/settlements", room.getId())
 				.header(HttpHeaders.AUTHORIZATION, bearer(outsider)))
 			.andExpect(status().isForbidden());
+	}
+
+	@Test
+	void mismatchedTotalBlocksEvenFullyAssignedReceipt() throws Exception {
+		User owner = createUser("owner@test.com", "owner");
+		Room room = roomRepository.save(Room.create("room", owner));
+		RoomMember payer = roomMemberRepository.save(RoomMember.create(room, owner));
+		Receipt receipt = receiptRepository.save(Receipt.createManual(room, "식사", payer, 4999L, null));
+		Item item = itemRepository.save(Item.create(receipt, "식사", 5000, 1));
+		assignmentRepository.save(Assignment.create(item, payer));
+		mockMvc.perform(get("/api/rooms/{roomId}/settlements", room.getId())
+				.header(HttpHeaders.AUTHORIZATION, bearer(owner)))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.data.ready").value(false))
+			.andExpect(jsonPath("$.data.members").isEmpty())
+			.andExpect(jsonPath("$.data.issues[0].code").value("TOTAL_MISMATCH"))
+			.andExpect(jsonPath("$.data.issues[0].receiptId").value(receipt.getId()));
+	}
+
+	@Test
+	void emptyReceiptNeedsReview() throws Exception {
+		User owner = createUser("owner@test.com", "owner");
+		Room room = roomRepository.save(Room.create("room", owner));
+		RoomMember payer = roomMemberRepository.save(RoomMember.create(room, owner));
+		receiptRepository.save(Receipt.createManual(room, "식사", payer, 5000L, null));
+		mockMvc.perform(get("/api/rooms/{roomId}/settlements", room.getId())
+				.header(HttpHeaders.AUTHORIZATION, bearer(owner)))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.data.ready").value(false))
+			.andExpect(jsonPath("$.data.members").isEmpty())
+			.andExpect(jsonPath("$.data.issues[*].code", org.hamcrest.Matchers.hasItem("EMPTY_RECEIPT")));
+	}
+
+	@Test
+	void remainderDoesNotDependOnAssignmentSaveOrder() throws Exception {
+		User owner = createUser("owner@test.com", "owner");
+		Room room = roomRepository.save(Room.create("room", owner));
+		RoomMember payer = roomMemberRepository.save(RoomMember.create(room, owner));
+		RoomMember other = roomMemberRepository.save(RoomMember.createManual(room, "다른 멤버"));
+		Receipt receipt = receiptRepository.save(Receipt.createManual(room, "식사", payer, 5L, null));
+		Item item = itemRepository.save(Item.create(receipt, "식사", 5, 1));
+		assignmentRepository.save(Assignment.create(item, payer));
+		assignmentRepository.save(Assignment.create(item, other));
+		var mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+		var first = mockMvc.perform(get("/api/rooms/{roomId}/settlements", room.getId())
+			.header(HttpHeaders.AUTHORIZATION, bearer(owner))).andExpect(status().isOk()).andReturn();
+		assignmentRepository.deleteAll();
+		assignmentRepository.save(Assignment.create(item, other));
+		assignmentRepository.save(Assignment.create(item, payer));
+		var second = mockMvc.perform(get("/api/rooms/{roomId}/settlements", room.getId())
+			.header(HttpHeaders.AUTHORIZATION, bearer(owner))).andExpect(status().isOk()).andReturn();
+		org.assertj.core.api.Assertions.assertThat(mapper.readTree(second.getResponse().getContentAsString()).at("/data/members"))
+			.isEqualTo(mapper.readTree(first.getResponse().getContentAsString()).at("/data/members"));
+	}
+
+	@Test
+	void explicitExclusionReducesBurdenAndPaidButStillCountsTowardOriginalTotal() throws Exception {
+		User owner = createUser("owner@test.com", "owner");
+		Room room = roomRepository.save(Room.create("room", owner));
+		RoomMember payer = roomMemberRepository.save(RoomMember.create(room, owner));
+		RoomMember participant = roomMemberRepository.save(RoomMember.createManual(room, "참여자"));
+		Receipt receipt = receiptRepository.save(Receipt.createManual(room, "식사", payer, 34000L, null));
+		Item included = itemRepository.save(Item.create(receipt, "식사", 24000, 1));
+		Item excluded = Item.create(receipt, "개인 구매", 10000, 1);
+		excluded.setExcludedFromSettlement(true);
+		itemRepository.save(excluded);
+		assignmentRepository.save(Assignment.create(included, participant));
+		mockMvc.perform(get("/api/rooms/{roomId}/settlements", room.getId())
+				.header(HttpHeaders.AUTHORIZATION, bearer(owner)))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.data.ready").value(true))
+			.andExpect(jsonPath("$.data.issues").isEmpty())
+			.andExpect(jsonPath("$.data.members[?(@.nickname=='owner')].paid").value(24000))
+			.andExpect(jsonPath("$.data.members[?(@.nickname=='owner')].burden").value(0))
+			.andExpect(jsonPath("$.data.members[?(@.nickname=='참여자')].net").value(-24000));
+		receipt.update("식사", payer, 24000L, null);
+		receiptRepository.save(receipt);
+		mockMvc.perform(get("/api/rooms/{roomId}/settlements", room.getId())
+				.header(HttpHeaders.AUTHORIZATION, bearer(owner)))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.data.ready").value(false))
+			.andExpect(jsonPath("$.data.members").isEmpty())
+			.andExpect(jsonPath("$.data.issues[*].code", org.hamcrest.Matchers.hasItem("TOTAL_MISMATCH")));
+	}
+
+	@Test
+	void allExcludedReceiptNeedsNoPayerButStillRequiresMatchingTotal() throws Exception {
+		User owner = createUser("owner@test.com", "owner");
+		Room room = roomRepository.save(Room.create("room", owner));
+		roomMemberRepository.save(RoomMember.create(room, owner));
+		Receipt receipt = receiptRepository.save(Receipt.createManual(room, "개인 구매", null, 10000L, null));
+		Item excluded = Item.create(receipt, "개인 구매", 10000, 1);
+		excluded.setExcludedFromSettlement(true);
+		itemRepository.save(excluded);
+		mockMvc.perform(get("/api/rooms/{roomId}/settlements", room.getId())
+				.header(HttpHeaders.AUTHORIZATION, bearer(owner)))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.data.ready").value(true))
+			.andExpect(jsonPath("$.data.members[0].paid").value(0))
+			.andExpect(jsonPath("$.data.members[0].burden").value(0))
+			.andExpect(jsonPath("$.data.members[0].net").value(0));
+		receipt.update("개인 구매", null, null, null);
+		receiptRepository.save(receipt);
+		mockMvc.perform(get("/api/rooms/{roomId}/settlements", room.getId())
+				.header(HttpHeaders.AUTHORIZATION, bearer(owner)))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.data.ready").value(false))
+			.andExpect(jsonPath("$.data.issues[*].code", org.hamcrest.Matchers.contains("MISSING_DECLARED_TOTAL")));
 	}
 
 	private User createUser(String email, String nickname) {

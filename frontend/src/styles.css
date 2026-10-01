@@ -1373,3 +1373,52 @@ select:focus {
     flex: 1;
   }
 }
+
+.receipt-fieldset {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+  border: 0;
+  margin: 0;
+  padding: 0;
+}
+
+.draft-item-assignment {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 8px;
+  padding: 8px 0 12px;
+  border-bottom: 1px solid var(--hairline-soft);
+}
+
+.exclusion-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.exclusion-toggle input {
+  width: auto;
+}
+
+.total-confirmation,
+.settlement-issues li {
+  display: grid;
+  gap: 8px;
+}
+
+.total-confirmation small,
+.draft-item-assignment small,
+.manual-assignee-field small,
+.draft-help {
+  color: var(--steel);
+  line-height: 1.5;
+}
+
+.settlement-issues {
+  display: grid;
+  gap: 16px;
+  padding-left: 0;
+  list-style: none;
+}

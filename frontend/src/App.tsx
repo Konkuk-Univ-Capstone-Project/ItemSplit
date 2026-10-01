@@ -15,9 +15,8 @@ import {
   WalletCards,
   X
 } from 'lucide-react';
-import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  addItem,
   addManualMember,
   createManualReceipt,
   createRoom,
@@ -25,7 +24,6 @@ import {
   deleteMember,
   deleteReceipt,
   deleteRoom,
-  getAssignees,
   getJoinOptions,
   getMembers,
   getReceipt,
@@ -39,13 +37,12 @@ import {
   replaceAssignees,
   signup,
   updateMemberName,
-  updateItem,
-  updateReceipt
+  updateReceipt,
+  updateReceiptContents
 } from './api';
 import type {
   AuthSession,
   ReceiptDetail,
-  ReceiptItem,
   ReceiptSummary,
   RecentRoom,
   RoomMember,
@@ -53,19 +50,23 @@ import type {
   SharedSettlement
 } from './types';
 
+import {
+  blankDraftItem,
+  receiptItemsToDraftItems,
+  normalizeReceiptDraft,
+  calculateDraftTotal,
+  getCreateAttempt,
+  applyParticipants,
+  setItemExcluded,
+  type DraftItem
+} from './receiptDraft';
+
 const AUTH_KEY = 'itemsplit.auth';
 const ROOMS_KEY = 'itemsplit.rooms';
 const ACTIVE_ROOM_KEY = 'itemsplit.activeRoomId';
 
 type MainTab = 'receipts' | 'settlement' | 'share';
 type AuthMode = 'login' | 'signup' | 'shared';
-
-type DraftItem = {
-  itemId?: number;
-  name: string;
-  price: string;
-  quantity: string;
-};
 
 type SettlementTransfer = {
   fromMemberId: number;
@@ -81,28 +82,13 @@ type Notice = {
 } | null;
 
 const defaultDraftItems: DraftItem[] = [
-  { name: '파스타', price: '15000', quantity: '1' },
-  { name: '피자', price: '22000', quantity: '1' }
+  { name: '파스타', price: '15000', quantity: '1', memberIds: [], excludedFromSettlement: false },
+  { name: '피자', price: '22000', quantity: '1', memberIds: [], excludedFromSettlement: false }
 ];
 const DEFAULT_RECEIPT_NAME = '팀 회식';
 
 function cloneDefaultDraftItems() {
   return defaultDraftItems.map((item) => ({ ...item }));
-}
-
-function blankDraftItem(): DraftItem {
-  return { name: '', price: '', quantity: '1' };
-}
-
-function receiptItemsToDraftItems(receipt: ReceiptDetail) {
-  return receipt.items.length > 0
-    ? receipt.items.map((item) => ({
-        itemId: item.itemId,
-        name: item.name,
-        price: String(item.price),
-        quantity: String(item.quantity)
-      }))
-    : [blankDraftItem()];
 }
 
 function readJson<T>(key: string, fallback: T): T {
@@ -133,15 +119,6 @@ function todayInputValue() {
   const now = new Date();
   const timezoneOffset = now.getTimezoneOffset() * 60000;
   return new Date(now.getTime() - timezoneOffset).toISOString().slice(0, 10);
-}
-
-function positiveDraftNumber(value: string) {
-  const number = Number(value);
-  return Number.isFinite(number) && number > 0 ? number : 0;
-}
-
-function calculateDraftTotal(items: DraftItem[]) {
-  return items.reduce((sum, item) => sum + positiveDraftNumber(item.price) * positiveDraftNumber(item.quantity), 0);
 }
 
 function calculateSettlementTransfers(members: Settlement['members']): SettlementTransfer[] {
@@ -817,13 +794,7 @@ function RoomWorkspace({
     try {
       const detail = await getReceipt(token, room.roomId, receiptId);
       setSelectedReceipt(detail);
-      const pairs = await Promise.all(
-        detail.items.map(async (item) => {
-          const result = await getAssignees(token, room.roomId, detail.receiptId, item.itemId);
-          return [item.itemId, result.assignees.map((assignee) => assignee.memberId)] as const;
-        })
-      );
-      setAssignees(Object.fromEntries(pairs));
+      setAssignees(Object.fromEntries(detail.items.map(item => [item.itemId, item.memberIds])));
     } catch (error) {
       setNotice({ kind: 'error', text: error instanceof Error ? error.message : '영수증을 불러오지 못했습니다.' });
     }
@@ -858,7 +829,7 @@ function RoomWorkspace({
         <div className="room-metrics">
           <Metric label="멤버" value={members.length} />
           <Metric label="영수증" value={receipts.length} />
-          <Metric label="합계" value={formatMoney(settlement?.members.reduce((sum, member) => sum + member.burden, 0) ?? 0)} />
+          <Metric label="합계" value={settlement?.ready ? formatMoney(settlement.members.reduce((sum, member) => sum + member.burden, 0)) : '확인 필요'} />
         </div>
       </section>
 
@@ -990,7 +961,6 @@ function ReceiptsView({
         roomId={roomId}
         members={members}
         editReceipt={selectedReceiptId === selectedReceipt?.receiptId ? selectedReceipt : null}
-        assignees={assignees}
         newDraftVersion={newDraftVersion}
         setSelectedReceiptId={setSelectedReceiptId}
         refreshRoom={refreshRoom}
@@ -1051,12 +1021,11 @@ function ReceiptsView({
   );
 }
 
-function ManualReceiptPanel({
+export function ManualReceiptPanel({
   token,
   roomId,
   members,
   editReceipt,
-  assignees,
   newDraftVersion,
   setSelectedReceiptId,
   refreshRoom,
@@ -1067,7 +1036,6 @@ function ManualReceiptPanel({
   roomId: number;
   members: RoomMember[];
   editReceipt: ReceiptDetail | null;
-  assignees: Record<number, number[]>;
   newDraftVersion: number;
   setSelectedReceiptId: (id: number | null) => void;
   refreshRoom: () => Promise<void>;
@@ -1079,23 +1047,25 @@ function ManualReceiptPanel({
   const [participantIds, setParticipantIds] = useState<number[]>([]);
   const [purchasedAt, setPurchasedAt] = useState(todayInputValue);
   const [items, setItems] = useState<DraftItem[]>(() => cloneDefaultDraftItems());
+  const [declaredTotal, setDeclaredTotal] = useState('');
+  const createAttempt = useRef<ReturnType<typeof getCreateAttempt> | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const ownerPayerId = useMemo(() => members.find((member) => member.owner)?.memberId ?? null, [members]);
   const isEditing = editReceipt !== null;
-  const declaredTotal = useMemo(() => {
-    const total = calculateDraftTotal(items);
-    return total > 0 ? String(total) : '';
-  }, [items]);
-
+  const itemTotal = useMemo(() => calculateDraftTotal(items), [items]);
   useEffect(() => {
     if (editReceipt) {
       setName(editReceipt.name);
+      setDeclaredTotal(editReceipt.declaredTotal === null ? '' : String(editReceipt.declaredTotal));
+      setParticipantIds([]);
       setPayerMemberId(editReceipt.payerMemberId !== null ? String(editReceipt.payerMemberId) : '');
-      setPurchasedAt(editReceipt.purchasedAt?.slice(0, 10) ?? todayInputValue());
+      setPurchasedAt(editReceipt.purchasedAt?.slice(0, 10) ?? '');
       setItems(receiptItemsToDraftItems(editReceipt));
       return;
     }
 
+    createAttempt.current = null;
+    setDeclaredTotal('');
     setName(DEFAULT_RECEIPT_NAME);
     setPayerMemberId(ownerPayerId !== null ? String(ownerPayerId) : '');
     setParticipantIds([]);
@@ -1104,47 +1074,15 @@ function ManualReceiptPanel({
   }, [roomId, editReceipt, newDraftVersion]);
 
   useEffect(() => {
-    if (!editReceipt) {
-      return;
-    }
-
-    const selected = new Set<number>();
-    editReceipt.items.forEach((item) => {
-      (assignees[item.itemId] ?? []).forEach((memberId) => selected.add(memberId));
-    });
-    setParticipantIds(Array.from(selected).filter((memberId) => members.some((member) => member.memberId === memberId)));
-  }, [editReceipt?.receiptId, assignees, members]);
-
-  useEffect(() => {
     setParticipantIds((current) => current.filter((memberId) => members.some((member) => member.memberId === memberId)));
   }, [members]);
-
-  useEffect(() => {
-    if (!editReceipt && !payerMemberId && ownerPayerId !== null) {
-      setPayerMemberId(String(ownerPayerId));
-    }
-  }, [editReceipt, ownerPayerId, payerMemberId]);
 
   function updateDraft(index: number, patch: Partial<DraftItem>) {
     setItems((current) => current.map((item, itemIndex) => (itemIndex === index ? { ...item, ...patch } : item)));
   }
 
   function removeDraft(index: number) {
-    setItems((current) => {
-      if (current.length <= 1) {
-        return [blankDraftItem()];
-      }
-      return current.filter((_, itemIndex) => itemIndex !== index);
-    });
-  }
-
-  function normalizedDraftItems() {
-    return items.map((item) => ({
-      itemId: item.itemId,
-      name: item.name.trim(),
-      price: Number(item.price),
-      quantity: Number(item.quantity)
-    }));
+    setItems((current) => current.filter((_, itemIndex) => itemIndex !== index));
   }
 
   function toggleParticipant(memberId: number) {
@@ -1153,88 +1091,29 @@ function ManualReceiptPanel({
     );
   }
 
-  async function applyParticipantsToItems(receiptId: number, receiptItems: ReceiptItem[]) {
-    const selectedMemberIds = participantIds.filter((memberId) =>
-      members.some((member) => member.memberId === memberId)
-    );
-
-    await Promise.all(
-      receiptItems.map((item) => replaceAssignees(token, roomId, receiptId, item.itemId, selectedMemberIds))
-    );
-  }
-
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
     setSubmitting(true);
     setNotice(null);
     try {
-      const nextItems = normalizedDraftItems();
-      if (
-        !name.trim() ||
-        nextItems.some(
-          (item) =>
-            !item.name ||
-            !Number.isInteger(item.price) ||
-            item.price <= 0 ||
-            !Number.isInteger(item.quantity) ||
-            item.quantity <= 0
-        )
-      ) {
-        setNotice({ kind: 'error', text: '상호명, 품목명, 가격, 수량을 올바르게 입력해주세요.' });
-        return;
-      }
-
+      const payload = normalizeReceiptDraft({ name, payerMemberId, declaredTotal, purchasedAt, items });
       if (editReceipt) {
-        await updateReceipt(token, roomId, editReceipt.receiptId, {
-          name: name.trim(),
-          payerMemberId: numberOrNull(payerMemberId),
-          declaredTotal: numberOrNull(declaredTotal),
-          purchasedAt: purchasedAt || null
-        });
-
-        const nextExistingItemIds = new Set(nextItems.flatMap((item) => (item.itemId ? [item.itemId] : [])));
-        const deletedItems = editReceipt.items.filter((item) => !nextExistingItemIds.has(item.itemId));
-
-        const savedItems = await Promise.all(
-          nextItems.map((item) =>
-            item.itemId
-              ? updateItem(token, roomId, editReceipt.receiptId, item.itemId, {
-                  name: item.name,
-                  price: item.price,
-                  quantity: item.quantity
-                })
-              : addItem(token, roomId, editReceipt.receiptId, {
-                  name: item.name,
-                  price: item.price,
-                  quantity: item.quantity
-                })
-          )
-        );
-        await Promise.all(deletedItems.map((item) => deleteItem(token, roomId, editReceipt.receiptId, item.itemId)));
-        await applyParticipantsToItems(editReceipt.receiptId, savedItems);
+        await updateReceiptContents(token, roomId, editReceipt.receiptId, payload);
         await refreshRoom();
         await refreshReceipt(editReceipt.receiptId);
         setNotice({ kind: 'success', text: '영수증을 수정했습니다.' });
         return;
       }
 
+      createAttempt.current = getCreateAttempt(createAttempt.current, payload);
       const created = await createManualReceipt(token, roomId, {
-        name: name.trim(),
-        payerMemberId: numberOrNull(payerMemberId),
-        declaredTotal: numberOrNull(declaredTotal),
-        purchasedAt: purchasedAt || null,
-        items: nextItems.map((item) => ({
-          name: item.name,
-          price: item.price,
-          quantity: item.quantity
-        }))
+        ...payload,
+        requestId: createAttempt.current.requestId,
+        items: payload.items.map(({ itemId: _itemId, ...item }) => item)
       });
-      await applyParticipantsToItems(created.receiptId, created.items);
       await refreshRoom();
       setSelectedReceiptId(created.receiptId);
       await refreshReceipt(created.receiptId);
-      setItems(cloneDefaultDraftItems());
-      setParticipantIds([]);
       setNotice({ kind: 'success', text: '영수증을 추가했습니다.' });
     } catch (error) {
       setNotice({
@@ -1248,112 +1127,154 @@ function ManualReceiptPanel({
 
   return (
     <form className="panel manual-panel" onSubmit={handleSubmit}>
-      <PanelHeader icon={<Plus size={19} />} title="수동 입력" />
-      <Field label="상호명">
-        <input
-          value={name}
-          onFocus={() => {
-            if (name === DEFAULT_RECEIPT_NAME) {
-              setName('');
-            }
-          }}
-          onBlur={(event) => {
-            if (!event.currentTarget.value.trim()) {
-              setName(DEFAULT_RECEIPT_NAME);
-            }
-          }}
-          onChange={(event) => setName(event.target.value)}
-          maxLength={100}
-          required
-        />
-      </Field>
-      <div className="field-row">
-        <Field label="결제자">
-          <select value={payerMemberId} onChange={(event) => setPayerMemberId(event.target.value)}>
-            <option value="">미지정</option>
-            {members.map((member) => (
-              <option value={member.memberId} key={member.memberId}>
-                {member.nickname}
-              </option>
-            ))}
-          </select>
+      <fieldset className="receipt-fieldset" disabled={submitting}>
+        <PanelHeader icon={<Plus size={19} />} title={isEditing ? "영수증 수정" : "수동 입력"} />
+        <Field label="상호명">
+          <input
+            value={name}
+            onFocus={() => {
+              if (name === DEFAULT_RECEIPT_NAME) {
+                setName('');
+              }
+            }}
+            onBlur={(event) => {
+              if (!event.currentTarget.value.trim()) {
+                setName(DEFAULT_RECEIPT_NAME);
+              }
+            }}
+            onChange={(event) => setName(event.target.value)}
+            maxLength={100}
+            required
+          />
         </Field>
-        <Field label="총액">
-          <input value={declaredTotal} type="number" min="0" readOnly />
-        </Field>
-      </div>
-      <div className="field manual-assignee-field">
-        <span>참여자</span>
-        <div className="member-chip-row manual-assignee-row">
-          {members.map((member) => {
-            const checked = participantIds.includes(member.memberId);
-            return (
-              <button
-                className={`member-chip ${checked ? 'active' : ''}`}
-                key={member.memberId}
-                type="button"
-                onClick={() => toggleParticipant(member.memberId)}
-              >
-                {member.nickname}
-              </button>
-            );
-          })}
+        <div className="field-row">
+          <Field label="결제자">
+            <select value={payerMemberId} onChange={(event) => setPayerMemberId(event.target.value)}>
+              <option value="">미지정</option>
+              {members.map((member) => (
+                <option value={member.memberId} key={member.memberId}>
+                  {member.nickname}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field label="원본 총액 (미입력 가능)">
+            <input value={declaredTotal} onChange={event => setDeclaredTotal(event.target.value)} inputMode="numeric" placeholder="미확정" />
+          </Field>
         </div>
-      </div>
-      <Field label="구매일">
-        <input value={purchasedAt} onChange={(event) => setPurchasedAt(event.target.value)} type="date" />
-      </Field>
-      <div className="draft-items">
-        {items.map((item, index) => (
-          <div className="draft-item" key={item.itemId ?? `new-${index}`}>
-            <input
-              value={item.name}
-              onChange={(event) => updateDraft(index, { name: event.target.value })}
-              placeholder="품목명"
-              required
-            />
-            <input
-              className="price-input"
-              value={item.price}
-              onChange={(event) => updateDraft(index, { price: event.target.value.replace(/\D/g, '') })}
-              type="text"
-              inputMode="numeric"
-              pattern="[0-9]*"
-              placeholder="가격"
-              required
-            />
-            <input
-              value={item.quantity}
-              onChange={(event) => updateDraft(index, { quantity: event.target.value.replace(/\D/g, '') })}
-              type="text"
-              inputMode="numeric"
-              pattern="[0-9]*"
-              placeholder="수량"
-              required
-            />
-            <button
-              className="icon-action danger draft-remove-button"
-              type="button"
-              title="품목 삭제"
-              onClick={() => removeDraft(index)}
-            >
-              <Trash2 size={15} />
-            </button>
+        <div className="total-confirmation">
+          <span>전체 품목 합계: {itemTotal === null ? '입력 확인 필요' : formatMoney(itemTotal)}</span>
+          {(!editReceipt || editReceipt.sourceType === 'MANUAL') && (
+            <button className="button ghost dense" type="button" disabled={itemTotal === null || itemTotal <= 0}
+              onClick={() => { if (itemTotal !== null) setDeclaredTotal(String(itemTotal)); }}>품목 합계로 총액 확인</button>
+          )}
+          {editReceipt?.sourceType === 'IMAGE_UPLOAD' && <small>이미지에 적힌 원본 총액을 직접 입력해주세요.</small>}
+          <small>제외 품목도 합계에 포함됩니다. 원본 총액은 품목을 수정해도 바뀌지 않습니다.</small>
+          {declaredTotal && itemTotal !== null && Number(declaredTotal) !== itemTotal && <span className="warning-badge">원본 총액과 품목 합계가 다릅니다. 초안 저장 후 수정할 수 있습니다.</span>}
+        </div>
+        <div className="field manual-assignee-field">
+          <span>참여자 일괄 지정</span>
+          <div className="member-chip-row manual-assignee-row">
+            {members.map((member) => {
+              const checked = participantIds.includes(member.memberId);
+              return (
+                <button
+                  className={`member-chip ${checked ? 'active' : ''}`}
+                  key={member.memberId}
+                  type="button"
+                  aria-pressed={checked}
+                  onClick={() => toggleParticipant(member.memberId)}
+                >
+                  {member.nickname}
+                </button>
+              );
+            })}
           </div>
-        ))}
-      </div>
-      <button
-        className="button ghost full-width"
-        type="button"
-        onClick={() => setItems((current) => [...current, blankDraftItem()])}
-      >
-        <Plus size={17} />
-        품목 추가
-      </button>
-      <button className="button blue full-width" type="submit" disabled={submitting}>
-        {submitting ? '저장 중' : isEditing ? '영수증 수정' : '영수증 저장'}
-        <Check size={17} />
-      </button>
+          <button className="button ghost dense" type="button"
+            onClick={() => setItems(current => applyParticipants(current, participantIds))}>
+            선택한 참여자를 모든 정산 품목에 적용
+          </button>
+          <small>위 버튼을 누를 때만 기존 품목별 참여자가 바뀝니다.</small>
+        </div>
+        <Field label="구매일">
+          <input value={purchasedAt} onChange={(event) => setPurchasedAt(event.target.value)} type="date" />
+        </Field>
+        <div className="draft-items">
+          {items.map((item, index) => (
+            <div className="draft-item" key={item.itemId ?? `new-${index}`}>
+              <input
+                value={item.name}
+                onChange={(event) => updateDraft(index, { name: event.target.value })}
+                placeholder="품목명"
+                required
+              />
+              <input
+                className="price-input"
+                value={item.price}
+                onChange={(event) => updateDraft(index, { price: event.target.value })}
+                type="text"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                placeholder="가격"
+                required
+              />
+              <input
+                value={item.quantity}
+                onChange={(event) => updateDraft(index, { quantity: event.target.value })}
+                type="text"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                placeholder="수량"
+                required
+              />
+              <button
+                className="icon-action danger draft-remove-button"
+                type="button"
+                title="품목 삭제"
+                onClick={() => removeDraft(index)}
+              >
+                <Trash2 size={15} />
+              </button>
+              <div className="draft-item-assignment">
+                <label className="exclusion-toggle">
+                  <input type="checkbox" checked={item.excludedFromSettlement}
+                    onChange={event => updateDraft(index, setItemExcluded(item, event.target.checked))} />
+                  정산에서 제외
+                </label>
+                {item.excludedFromSettlement ? (
+                  <small>참여자 지정을 해제하고 부담·결제 금액에서 제외합니다. 다시 포함하면 참여자를 선택해주세요.</small>
+                ) : (
+                  <>
+                    <div className="member-chip-row">
+                      {members.map(member => {
+                        const selected = item.memberIds.includes(member.memberId);
+                        return <button key={member.memberId} type="button" aria-pressed={selected}
+                          className={`member-chip ${selected ? 'active' : ''}`}
+                          onClick={() => updateDraft(index, { memberIds: selected ? item.memberIds.filter(id => id !== member.memberId) : [...item.memberIds, member.memberId] })}>
+                          {member.nickname}
+                        </button>;
+                      })}
+                    </div>
+                    {item.memberIds.length === 0 && <small>참여자 미지정: 저장할 수 있지만 송금 정산 전 지정이 필요합니다.</small>}
+                  </>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+        <button
+          className="button ghost full-width"
+          type="button"
+          onClick={() => setItems((current) => [...current, blankDraftItem()])}
+        >
+          <Plus size={17} />
+          품목 추가
+        </button>
+        <button className="button blue full-width" type="submit" disabled={submitting}>
+          {submitting ? '저장 중' : isEditing ? '영수증 수정' : '영수증 저장'}
+          <Check size={17} />
+        </button>
+      </fieldset>
     </form>
   );
 }
@@ -1496,6 +1417,7 @@ function ReceiptDetailPanel({
                   {formatMoney(item.price)} × {item.quantity}
                 </span>
               </div>
+              {item.excludedFromSettlement && <small className="warning-badge">정산 제외 · 수정 폼에서 다시 포함할 수 있습니다.</small>}
               <div className="member-chip-row">
                 {members.map((member) => {
                   const checked = selected.includes(member.memberId);
@@ -1504,7 +1426,7 @@ function ReceiptDetailPanel({
                       type="button"
                       className={`member-chip ${checked ? 'active' : ''}`}
                       key={member.memberId}
-                      disabled={savingAssigneeItemId === item.itemId}
+                      disabled={savingAssigneeItemId !== null || item.excludedFromSettlement}
                       onClick={() => toggleAssignee(item.itemId, member.memberId, selected)}
                     >
                       {member.nickname}
@@ -1525,12 +1447,29 @@ function ReceiptDetailPanel({
   );
 }
 
-function SettlementBoard({ settlement, compact = false }: { settlement: Settlement | SharedSettlement | null; compact?: boolean }) {
+export function SettlementBoard({ settlement, compact = false }: { settlement: Settlement | SharedSettlement | null; compact?: boolean }) {
   if (!settlement) {
     return (
       <section className="panel settlement-panel">
         <PanelHeader icon={<WalletCards size={19} />} title="정산" />
         <div className="empty-box">정산 결과가 없습니다.</div>
+      </section>
+    );
+  }
+
+  if ('ready' in settlement && !settlement.ready) {
+    return (
+      <section className="panel settlement-panel">
+        <PanelHeader icon={<WalletCards size={19} />} title="정산 준비가 필요합니다" />
+        <p className="draft-help">아래 내용을 수정하면 송금 정산을 확인할 수 있습니다.</p>
+        <ul className="settlement-issues">
+          {settlement.issues.map((issue, index) => (
+            <li key={`${issue.code}-${issue.receiptId}-${issue.itemId}-${index}`}>
+              <strong>영수증 #{issue.receiptId}{issue.itemId !== null ? ` · 품목 #${issue.itemId}` : ''}</strong>
+              <span>{issue.message}</span>
+            </li>
+          ))}
+        </ul>
       </section>
     );
   }

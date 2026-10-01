@@ -180,10 +180,11 @@ class ReceiptControllerTest {
 					.contentType(MediaType.APPLICATION_JSON)
 					.content("""
 						{
+						  "requestId": "legacy-test-request",
 						  "name": "Dinner Manual Entry",
 						  "items": [
-						    { "name": "Pasta", "price": 15000, "quantity": 1 },
-						    { "name": "Pizza", "price": 22000, "quantity": 2 }
+						    { "name": "Pasta", "price": 15000, "quantity": 1, "memberIds": [], "excludedFromSettlement": false },
+						    { "name": "Pizza", "price": 22000, "quantity": 2, "memberIds": [], "excludedFromSettlement": false }
 						  ]
 						}
 						""")
@@ -218,9 +219,10 @@ class ReceiptControllerTest {
 					.contentType(MediaType.APPLICATION_JSON)
 					.content("""
 						{
+						  "requestId": "legacy-test-request",
 						  "name": "Dinner Manual Entry",
 						  "items": [
-						    { "name": "Pasta", "price": 15000, "quantity": 1 }
+						    { "name": "Pasta", "price": 15000, "quantity": 1, "memberIds": [], "excludedFromSettlement": false }
 						  ]
 						}
 						""")
@@ -245,6 +247,7 @@ class ReceiptControllerTest {
 					.contentType(MediaType.APPLICATION_JSON)
 					.content("""
 						{
+						  "requestId": "legacy-test-request",
 						  "name": "Dinner Manual Entry",
 						  "items": []
 						}

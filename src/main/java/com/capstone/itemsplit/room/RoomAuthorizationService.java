@@ -14,6 +14,16 @@ public class RoomAuthorizationService {
 	private final RoomRepository roomRepository;
 	private final RoomMemberRepository roomMemberRepository;
 
+    @Transactional
+    public Room checkMemberForUpdate(Long roomId, Long userId) {
+        Room room = roomRepository.findByIdForUpdate(roomId)
+            .orElseThrow(() -> new ApiException(ErrorCode.NOT_FOUND, "Room was not found."));
+        if (!roomMemberRepository.existsByRoomIdAndUserId(roomId, userId)) {
+            throw new ApiException(ErrorCode.FORBIDDEN, "You are not a member of this room.");
+        }
+        return room;
+    }
+
 	public Room checkMember(Long roomId, Long userId) {
 		Room room = roomRepository.findById(roomId)
 			.orElseThrow(() -> new ApiException(ErrorCode.NOT_FOUND, "Room was not found."));

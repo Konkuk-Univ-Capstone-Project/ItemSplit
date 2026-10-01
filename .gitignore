@@ -51,3 +51,12 @@ frontend/vite.config.d.ts
 # OS-generated files
 .DS_Store
 CLAUDE.md
+
+# Local development plans and agent work reports
+/report/first-semester-review/
+/docs/*-plan.md
+/docs/plans/
+/docs/superpowers/
+AGENTS.md
+CODEX.md
+GEMINI.md

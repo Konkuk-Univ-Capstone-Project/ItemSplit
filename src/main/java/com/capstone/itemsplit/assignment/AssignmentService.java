@@ -8,7 +8,6 @@ import com.capstone.itemsplit.receipt.Receipt;
 import com.capstone.itemsplit.receipt.ReceiptRepository;
 import com.capstone.itemsplit.room.RoomMember;
 import com.capstone.itemsplit.room.RoomMemberRepository;
-import com.capstone.itemsplit.user.UserRepository;
 import com.capstone.itemsplit.room.RoomAuthorizationService;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -26,7 +25,6 @@ public class AssignmentService {
 	private final AssignmentRepository assignmentRepository;
 	private final ItemRepository itemRepository;
 	private final ReceiptRepository receiptRepository;
-	private final UserRepository userRepository;
 	private final RoomMemberRepository roomMemberRepository;
 	private final RoomAuthorizationService roomAuthorizationService;
 
@@ -43,8 +41,12 @@ public class AssignmentService {
 		Long requesterId,
 		List<Long> memberIds
 	) {
+		roomAuthorizationService.checkMemberForUpdate(roomId, requesterId);
 		Item item = validateRequestScope(roomId, receiptId, itemId, requesterId);
 		LinkedHashSet<Long> uniqueMemberIds = new LinkedHashSet<>(memberIds);
+		if (item.isExcludedFromSettlement() && !uniqueMemberIds.isEmpty()) {
+			throw new ApiException(ErrorCode.VALIDATION_ERROR, "정산 제외 품목에는 참여자를 지정할 수 없습니다.");
+		}
 
 		List<RoomMember> roomMembers = resolveAssigneeMembers(roomId, uniqueMemberIds);
 
@@ -92,18 +94,6 @@ public class AssignmentService {
 			Map<Long, RoomMember> memberById = membersById.stream()
 				.collect(java.util.stream.Collectors.toMap(RoomMember::getId, Function.identity()));
 			return memberIds.stream().map(memberById::get).toList();
-		}
-
-		List<RoomMember> membersByUserId = roomMemberRepository.findAllByRoomIdAndUserIdIn(roomId, memberIds);
-		if (membersByUserId.size() == memberIds.size()) {
-			Map<Long, RoomMember> memberByUserId = membersByUserId.stream()
-				.collect(java.util.stream.Collectors.toMap(member -> member.getUser().getId(), Function.identity()));
-			return memberIds.stream().map(memberByUserId::get).toList();
-		}
-
-		long existingUserCount = userRepository.countByIdIn(memberIds);
-		if (existingUserCount != memberIds.size()) {
-			throw new ApiException(ErrorCode.NOT_FOUND, "One or more members were not found.");
 		}
 
 		throw new ApiException(ErrorCode.VALIDATION_ERROR, "All assignees must be members of this room.");

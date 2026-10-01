@@ -89,7 +89,7 @@ class AssignmentControllerTest {
 						{
 						  "memberIds": [%d, %d]
 						}
-						""".formatted(memberOne.getId(), memberTwo.getId()))
+						""".formatted(memberId(fixture.room(), memberOne), memberId(fixture.room(), memberTwo)))
 			)
 			.andExpect(status().isOk())
 			.andExpect(jsonPath("$.success").value(true))
@@ -109,7 +109,7 @@ class AssignmentControllerTest {
 						{
 						  "memberIds": [%d, %d]
 						}
-						""".formatted(memberTwo.getId(), memberThree.getId()))
+						""".formatted(memberId(fixture.room(), memberTwo), memberId(fixture.room(), memberThree)))
 			)
 			.andExpect(status().isOk())
 			.andExpect(jsonPath("$.success").value(true))
@@ -146,7 +146,7 @@ class AssignmentControllerTest {
 						{
 						  "memberIds": [%d, %d]
 						}
-						""".formatted(memberOne.getId(), memberTwo.getId()))
+						""".formatted(memberId(fixture.room(), memberOne), memberId(fixture.room(), memberTwo)))
 			)
 			.andExpect(status().isOk());
 
@@ -239,7 +239,7 @@ class AssignmentControllerTest {
 		User outsider = createUser("outsider@example.com", "outsider");
 		ItemFixture fixture = createItemFixture("Capstone Team", "Dinner", "Pasta", owner, member);
 		Room otherRoom = roomRepository.save(Room.create("Other Team", outsider));
-		roomMemberRepository.save(RoomMember.create(otherRoom, outsider));
+		RoomMember outsiderMember = roomMemberRepository.save(RoomMember.create(otherRoom, outsider));
 
 		mockMvc
 			.perform(
@@ -248,7 +248,7 @@ class AssignmentControllerTest {
 						{
 						  "memberIds": [%d, %d]
 						}
-						""".formatted(member.getId(), outsider.getId()))
+						""".formatted(memberId(fixture.room(), member), outsiderMember.getId()))
 			)
 			.andExpect(status().isBadRequest())
 			.andExpect(jsonPath("$.success").value(false))
@@ -323,8 +323,8 @@ class AssignmentControllerTest {
 	}
 
 	@Test
-	@DisplayName("PUT assignees 요청은 존재하지 않는 멤버 ID가 있으면 404를 반환한다")
-	void 존재하지_않는_멤버를_담당자로_지정하면_404를_반환한다() throws Exception {
+	@DisplayName("PUT assignees 요청은 존재하지 않는 멤버 ID가 있으면 검증 오류를 반환한다")
+	void 존재하지_않는_멤버를_담당자로_지정하면_검증_오류를_반환한다() throws Exception {
 		User owner = createUser("owner@example.com", "owner");
 		ItemFixture fixture = createItemFixture("Capstone Team", "Dinner", "Pasta", owner);
 
@@ -337,10 +337,8 @@ class AssignmentControllerTest {
 						}
 						""")
 			)
-			.andExpect(status().isNotFound())
-			.andExpect(jsonPath("$.success").value(false))
-			.andExpect(jsonPath("$.error.code").value("NOT_FOUND"))
-			.andExpect(jsonPath("$.error.message").value("One or more members were not found."));
+			.andExpect(status().isBadRequest())
+			.andExpect(jsonPath("$.error.code").value("VALIDATION_ERROR"));
 	}
 
 	@Test
@@ -449,6 +447,26 @@ class AssignmentControllerTest {
 		Receipt receipt = receiptRepository.save(Receipt.createManual(room, receiptName, null, null, null));
 		Item item = itemRepository.save(Item.create(receipt, itemName, 15000, 1));
 		return new ItemFixture(room, receipt, item);
+	}
+
+	@Test
+	void excludedItemRejectsAssignmentsButAllowsClearing() throws Exception {
+		User owner = createUser("owner@example.com", "owner");
+		ItemFixture fixture = createItemFixture("room", "receipt", "item", owner);
+		fixture.item().setExcludedFromSettlement(true);
+		itemRepository.save(fixture.item());
+		mockMvc.perform(putAssignees(fixture.room().getId(), fixture.receipt().getId(), fixture.item().getId(), owner,
+			"{\"memberIds\":[" + memberId(fixture.room(), owner) + "]}"))
+			.andExpect(status().isBadRequest())
+			.andExpect(jsonPath("$.error.code").value("VALIDATION_ERROR"));
+		mockMvc.perform(putAssignees(fixture.room().getId(), fixture.receipt().getId(), fixture.item().getId(), owner,
+			"{\"memberIds\":[]}"))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.data.assignees").isEmpty());
+	}
+
+	private Long memberId(Room room, User user) {
+		return roomMemberRepository.findByRoomIdAndUserId(room.getId(), user.getId()).orElseThrow().getId();
 	}
 
 	private User createUser(String email, String nickname) {
