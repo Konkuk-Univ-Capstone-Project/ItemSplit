@@ -1,9 +1,8 @@
--- Existing PostgreSQL schema migration; stop all application instances and back up first.
--- Safe to rerun, including after Hibernate partially updated the schema.
--- This script does not create a fresh installation schema.
--- Run with psql -v ON_ERROR_STOP=1 -f db/migrations/001_common_contract.sql
--- Record successful execution in the deployment change log.
-BEGIN;
+-- Common contract changes for databases created before the contract (PR #16).
+-- Written to be safe on any starting point: a database that never had these changes,
+-- one Hibernate updated partially, one where the old manual script already ran, and a
+-- fresh database right after V1 (where it changes nothing but the defaults and checks).
+-- Flyway runs this file in one transaction, so a failure leaves the schema untouched.
 ALTER TABLE items ALTER COLUMN price TYPE BIGINT USING price::BIGINT;
 ALTER TABLE receipts ALTER COLUMN declared_total TYPE BIGINT USING declared_total::BIGINT;
 ALTER TABLE items ADD COLUMN IF NOT EXISTS excluded_from_settlement BOOLEAN DEFAULT FALSE;
@@ -35,4 +34,3 @@ BEGIN
       CHECK (declared_total IS NULL OR declared_total BETWEEN 1 AND 10000000) NOT VALID;
   END IF;
 END $$;
-COMMIT;
