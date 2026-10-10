@@ -1,13 +1,13 @@
 package com.capstone.itemsplit.migration;
 
+import org.flywaydb.core.Flyway;
+import org.flywaydb.core.api.FlywayException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.sql.DriverManager;
 import java.sql.SQLException;
 
@@ -97,14 +97,14 @@ class CommonContractMigrationTest {
             UPDATE receipts SET request_id='duplicate';
             INSERT INTO receipts VALUES (2,10,1000,'duplicate');
             """);
-        assertThatThrownBy(this::migrate).isInstanceOf(SQLException.class);
+        assertThatThrownBy(this::migrate).isInstanceOf(FlywayException.class);
         assertThat(value("SELECT pg_typeof(price) FROM items LIMIT 1")).isEqualTo("integer");
         assertThat(value("SELECT count(*) FROM information_schema.columns WHERE table_name='items' AND column_name='excluded_from_settlement'"))
                 .isEqualTo("0");
     }
 
     @Test
-    void localStartupFailsOnBrokenSchemaAndReadsItemsAfterMigration() throws Exception {
+    void startupFailsOnBrokenSchemaAndReadsItemsAfterMigration() throws Exception {
         sql("DROP SCHEMA public CASCADE; CREATE SCHEMA public;");
         try (var factory = sessionFactory("create")) {
             assertThat(factory.isOpen()).isTrue();
@@ -124,7 +124,7 @@ class CommonContractMigrationTest {
             INSERT INTO items(id,name,price,quantity,receipt_id) VALUES(1,'item',1000,1,1);
             """);
         assertThatThrownBy(() -> {
-            try (var ignored = sessionFactory(null)) { }
+            try (var ignored = sessionFactory("validate")) { }
         }).hasStackTraceContaining("excluded_from_settlement");
         migrate();
         try (var factory = sessionFactory("validate"); var session = factory.openSession()) {
@@ -136,22 +136,11 @@ class CommonContractMigrationTest {
     }
 
     private org.hibernate.SessionFactory sessionFactory(String mode) throws Exception {
-        var yaml = new org.springframework.beans.factory.config.YamlPropertiesFactoryBean();
-        yaml.setResources(new org.springframework.core.io.ClassPathResource("application-local.yml"));
-        var properties = java.util.Objects.requireNonNull(yaml.getObject());
-        var builder = new org.hibernate.boot.registry.StandardServiceRegistryBuilder();
-        properties.forEach((key, value) -> {
-            String name = key.toString();
-            if (name.startsWith("spring.jpa.properties.")) {
-                builder.applySetting(name.substring("spring.jpa.properties.".length()), value);
-            }
-        });
-        var registry = builder
+        var registry = new org.hibernate.boot.registry.StandardServiceRegistryBuilder()
                 .applySetting("hibernate.connection.url", postgres.getJdbcUrl())
                 .applySetting("hibernate.connection.username", postgres.getUsername())
                 .applySetting("hibernate.connection.password", postgres.getPassword())
-                .applySetting("hibernate.hbm2ddl.auto", mode == null
-                        ? properties.getProperty("spring.jpa.hibernate.ddl-auto") : mode)
+                .applySetting("hibernate.hbm2ddl.auto", mode)
                 .applySetting("hibernate.physical_naming_strategy",
                         org.hibernate.boot.model.naming.CamelCaseToUnderscoresNamingStrategy.class)
                 .build();
@@ -169,8 +158,17 @@ class CommonContractMigrationTest {
         }
     }
 
-    private void migrate() throws Exception {
-        sql(Files.readString(Path.of("db/migrations/001_common_contract.sql")));
+    // Same settings the application starts with: an existing schema is baselined at V1, then V2 runs.
+    private void migrate() {
+        var yaml = new org.springframework.beans.factory.config.YamlPropertiesFactoryBean();
+        yaml.setResources(new org.springframework.core.io.ClassPathResource("application.yml"));
+        var properties = java.util.Objects.requireNonNull(yaml.getObject());
+        Flyway.configure()
+                .dataSource(postgres.getJdbcUrl(), postgres.getUsername(), postgres.getPassword())
+                .baselineOnMigrate(Boolean.parseBoolean(properties.getProperty("spring.flyway.baseline-on-migrate")))
+                .baselineVersion(properties.getProperty("spring.flyway.baseline-version"))
+                .load()
+                .migrate();
     }
 
     private void sql(String sql) throws SQLException {

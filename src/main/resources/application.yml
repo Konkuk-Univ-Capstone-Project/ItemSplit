@@ -8,6 +8,12 @@ spring:
       accept-float-as-int: false
   jpa:
     open-in-view: false
+    hibernate:
+      ddl-auto: validate
+  flyway:
+    # A database created before Flyway already has the V1 tables: mark it as version 1 and continue from V2.
+    baseline-on-migrate: true
+    baseline-version: 1
 
 management:
   endpoints:
