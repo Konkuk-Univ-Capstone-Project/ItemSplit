@@ -1,0 +1,13 @@
+{
+  "version": "V2",
+  "requestId": "synthetic-failure",
+  "timestamp": 1791676800000,
+  "images": [
+    {
+      "uid": "synthetic-image",
+      "name": "synthetic-receipt",
+      "inferResult": "FAILURE",
+      "message": "Receipt not detected"
+    }
+  ]
+}
