@@ -17,7 +17,7 @@ import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.util.StringUtils;
 
-/** Coordinates local file removal with the database transaction outcome. */
+/** Coordinates stored file removal with the database transaction outcome. */
 @Service
 public class StorageCleanupService {
 
@@ -26,9 +26,9 @@ public class StorageCleanupService {
 	private final Path pendingDirectory;
 
 	public StorageCleanupService(StorageService storageService,
-		@Value("${app.storage.local.root-path:./storage}") String rootPath) {
+		@Value("${app.storage.cleanup-queue-path:${app.storage.local.root-path:./storage}/.cleanup-pending}") String queuePath) {
 		this.storageService = storageService;
-		this.pendingDirectory = Path.of(rootPath).toAbsolutePath().normalize().resolve(".cleanup-pending");
+		this.pendingDirectory = Path.of(queuePath).toAbsolutePath().normalize();
 	}
 
 	public void deleteAfterCommit(String storedPath) {

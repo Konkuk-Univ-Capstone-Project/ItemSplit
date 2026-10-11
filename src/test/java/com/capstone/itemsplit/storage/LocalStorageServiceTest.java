@@ -18,11 +18,33 @@ class LocalStorageServiceTest {
 	@Test
 	void storedFileCanBeDeletedAndRepeatedDeletionIsHarmless() throws Exception {
 		LocalStorageService storage = new LocalStorageService(root.toString());
-		StorageService.StoredFile stored = storage.store("receipts/1", upload());
+		StorageService.StoredFile stored = storage.store("receipts/1", upload(), "png", "image/png");
 		assertThat(Files.readAllBytes(root.resolve(stored.storedPath()))).containsExactly(new byte[] {1, 2, 3});
 		storage.delete(stored.storedPath());
 		assertThat(root.resolve(stored.storedPath())).doesNotExist();
 		storage.delete(stored.storedPath());
+	}
+
+	@Test
+	void storedNameUsesTheGivenExtensionAndTypeInsteadOfTheClientFilename() throws Exception {
+		LocalStorageService storage = new LocalStorageService(root.toString());
+		StorageService.StoredFile stored = storage.store("receipts/1",
+			new MockMultipartFile("file", "../evil.exe", "application/x-msdownload", new byte[] {1}), "jpg", "image/jpeg");
+		assertThat(stored.storedPath()).startsWith("receipts/1/").endsWith(".jpg").doesNotContain("evil");
+		assertThat(stored.contentType()).isEqualTo("image/jpeg");
+		assertThat(stored.originalFilename()).isEqualTo("evil.exe");
+	}
+
+	@Test
+	void readReturnsStoredBytesAndRejectsMissingOrOutsidePaths() throws Exception {
+		Path storageRoot = Files.createDirectory(root.resolve("storage"));
+		Files.write(root.resolve("outside.png"), new byte[] {9});
+		LocalStorageService storage = new LocalStorageService(storageRoot.toString());
+		StorageService.StoredFile stored = storage.store("receipts/1", upload(), "png", "image/png");
+		assertThat(storage.read(stored.storedPath())).containsExactly(new byte[] {1, 2, 3});
+		for (String invalid : new String[] {"receipts/1/missing.png", "../outside.png", ""}) {
+			assertThatThrownBy(() -> storage.read(invalid)).isInstanceOf(IOException.class);
+		}
 	}
 
 	@Test
@@ -51,7 +73,7 @@ class LocalStorageServiceTest {
 	@Test
 	void storeRejectsParentTraversal() {
 		LocalStorageService storage = new LocalStorageService(root.toString());
-		assertThatThrownBy(() -> storage.store("../outside", upload())).isInstanceOf(IOException.class);
+		assertThatThrownBy(() -> storage.store("../outside", upload(), "png", "image/png")).isInstanceOf(IOException.class);
 	}
 
 	@Test
@@ -60,7 +82,7 @@ class LocalStorageServiceTest {
 		Path outside = Files.createDirectory(root.resolve("outside"));
 		Files.createSymbolicLink(storageRoot.resolve("receipts"), outside);
 		LocalStorageService storage = new LocalStorageService(storageRoot.toString());
-		assertThatThrownBy(() -> storage.store("receipts", upload())).isInstanceOf(IOException.class);
+		assertThatThrownBy(() -> storage.store("receipts", upload(), "png", "image/png")).isInstanceOf(IOException.class);
 		try (var files = Files.list(outside)) {
 			assertThat(files).isEmpty();
 		}
@@ -85,7 +107,7 @@ class LocalStorageServiceTest {
 				};
 			}
 		};
-		assertThatThrownBy(() -> storage.store("receipts/1", file)).isInstanceOf(IOException.class);
+		assertThatThrownBy(() -> storage.store("receipts/1", file, "png", "image/png")).isInstanceOf(IOException.class);
 		try (var files = Files.list(root.resolve("receipts/1"))) {
 			assertThat(files).isEmpty();
 		}

@@ -11,6 +11,7 @@ import com.capstone.itemsplit.user.User;
 import com.capstone.itemsplit.user.UserRepository;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -65,8 +66,12 @@ class ReceiptControllerTest {
 	@Autowired
 	private ReceiptRepository receiptRepository;
 
+	@Autowired
+	private ReceiptImageRepository receiptImageRepository;
+
 	@BeforeEach
 	void setUp() throws Exception {
+		receiptImageRepository.deleteAll();
 		assignmentRepository.deleteAll();
 		itemRepository.deleteAll();
 		receiptRepository.deleteAll();
@@ -75,6 +80,12 @@ class ReceiptControllerTest {
 		userRepository.deleteAll();
 		FileSystemUtils.deleteRecursively(TEST_STORAGE_ROOT);
 		Files.createDirectories(TEST_STORAGE_ROOT);
+	}
+
+	// Other test classes share this database and delete receipts without knowing about images.
+	@AfterEach
+	void tearDown() {
+		receiptImageRepository.deleteAll();
 	}
 
 	@Test
@@ -88,7 +99,7 @@ class ReceiptControllerTest {
 			"file",
 			"receipt-sample.png",
 			"image/png",
-			"fake-image-bytes".getBytes()
+			new byte[] {(byte) 0x89, 'P', 'N', 'G', 0x0D, 0x0A, 0x1A, 0x0A, 1, 2, 3}
 		);
 
 		mockMvc
@@ -103,11 +114,12 @@ class ReceiptControllerTest {
 			.andExpect(jsonPath("$.data.roomId").value(room.getId()))
 			.andExpect(jsonPath("$.data.name").value("Dinner Receipt"))
 			.andExpect(jsonPath("$.data.sourceType").value("IMAGE_UPLOAD"))
-			.andExpect(jsonPath("$.data.originalFilename").value("receipt-sample.png"))
-			.andExpect(jsonPath("$.data.storedPath").value(org.hamcrest.Matchers.startsWith("receipts/" + room.getId() + "/")));
+			.andExpect(jsonPath("$.data.image.originalFilename").value("receipt-sample.png"))
+			.andExpect(jsonPath("$.data.storedPath").doesNotExist());
 
 		assertThat(receiptRepository.count()).isEqualTo(1);
-		String storedPath = receiptRepository.findAll().get(0).getStoredPath();
+		String storedPath = receiptImageRepository.findAll().get(0).getStoredPath();
+		assertThat(storedPath).startsWith("receipts/" + room.getId() + "/");
 		assertThat(Files.exists(TEST_STORAGE_ROOT.resolve(storedPath))).isTrue();
 	}
 
@@ -161,7 +173,7 @@ class ReceiptControllerTest {
 			.andExpect(status().isBadRequest())
 			.andExpect(jsonPath("$.success").value(false))
 			.andExpect(jsonPath("$.error.code").value("VALIDATION_ERROR"))
-			.andExpect(jsonPath("$.error.message").value("Only image files can be uploaded."));
+			.andExpect(jsonPath("$.error.message").value("JPEG 또는 PNG 이미지만 올릴 수 있습니다."));
 
 		assertThat(receiptRepository.count()).isZero();
 	}
@@ -200,7 +212,7 @@ class ReceiptControllerTest {
 
 		assertThat(receiptRepository.count()).isEqualTo(1);
 		assertThat(itemRepository.count()).isEqualTo(2);
-		assertThat(receiptRepository.findAll().get(0).getStoredPath()).isNull();
+		assertThat(receiptImageRepository.count()).isZero();
 		assertThat(receiptRepository.findAll().get(0).getSourceType().name()).isEqualTo("MANUAL");
 	}
 

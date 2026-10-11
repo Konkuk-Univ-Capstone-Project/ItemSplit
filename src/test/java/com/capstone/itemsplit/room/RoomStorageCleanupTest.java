@@ -1,6 +1,8 @@
 package com.capstone.itemsplit.room;
 
 import com.capstone.itemsplit.receipt.Receipt;
+import com.capstone.itemsplit.receipt.ReceiptImage;
+import com.capstone.itemsplit.receipt.ReceiptImageRepository;
 import com.capstone.itemsplit.receipt.ReceiptRepository;
 import com.capstone.itemsplit.storage.StorageService;
 import com.capstone.itemsplit.user.User;
@@ -37,6 +39,7 @@ class RoomStorageCleanupTest {
 	@Autowired private RoomMemberRepository roomMemberRepository;
 	@Autowired private UserRepository userRepository;
 	@Autowired private ReceiptRepository receiptRepository;
+	@Autowired private ReceiptImageRepository receiptImageRepository;
 	@Autowired private StorageService storageService;
 	@Autowired private PlatformTransactionManager transactionManager;
 
@@ -69,9 +72,9 @@ class RoomStorageCleanupTest {
 		Room room = roomRepository.save(Room.create("Files", owner));
 		roomMemberRepository.save(RoomMember.create(room, owner));
 		StorageService.StoredFile stored = storageService.store("receipts/" + room.getId(),
-			new MockMultipartFile("file", "receipt.png", "image/png", new byte[] {1, 2, 3}));
-		Receipt receipt = receiptRepository.save(Receipt.createImageUpload(room, "Receipt", stored.storedPath(),
-			stored.originalFilename(), stored.contentType(), stored.size()));
+			new MockMultipartFile("file", "receipt.png", "image/png", new byte[] {1, 2, 3}), "png", "image/png");
+		Receipt receipt = receiptRepository.save(Receipt.createImageUpload(room, "Receipt", owner, null));
+		receiptImageRepository.save(ReceiptImage.create(receipt, 1, stored));
 		receiptRepository.save(Receipt.createManual(room, "Manual", null, null, null));
 		return new Fixture(room.getId(), owner.getId(), receipt.getId(), storageRoot.resolve(stored.storedPath()));
 	}

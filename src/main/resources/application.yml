@@ -6,6 +6,11 @@ spring:
   jackson:
     deserialization:
       accept-float-as-int: false
+  servlet:
+    multipart:
+      # One receipt image per request, up to 10MB. nginx allows 12m to leave room for the multipart envelope.
+      max-file-size: 10MB
+      max-request-size: 11MB
   jpa:
     open-in-view: false
     hibernate:
@@ -34,8 +39,13 @@ app:
     secret: ${JWT_SECRET:change-me-to-a-long-random-secret-for-itemsplit}
     access-token-expiration: ${JWT_ACCESS_TOKEN_EXPIRATION:86400000}
   storage:
+    type: ${STORAGE_TYPE:local}   # local | s3
+    cleanup-queue-path: ${STORAGE_CLEANUP_QUEUE:${app.storage.local.root-path}/.cleanup-pending}
     local:
       root-path: ${LOCAL_STORAGE_ROOT:./storage}
+    s3:
+      bucket: ${S3_BUCKET:}
+      region: ${AWS_REGION:ap-northeast-2}
   rate-limit:
     enabled: ${RATE_LIMIT_ENABLED:true}
     capacity: ${RATE_LIMIT_CAPACITY:120}

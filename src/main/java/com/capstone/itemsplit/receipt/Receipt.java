@@ -2,6 +2,7 @@ package com.capstone.itemsplit.receipt;
 
 import com.capstone.itemsplit.room.Room;
 import com.capstone.itemsplit.room.RoomMember;
+import com.capstone.itemsplit.user.User;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import jakarta.persistence.Column;
@@ -42,17 +43,13 @@ public class Receipt {
     @Column(nullable = false, length = 30)
     private ReceiptSourceType sourceType;
 
-    private String storedPath;
-
-    private String originalFilename;
-
-    private String contentType;
-
-    private Long fileSize;
-
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "payer_member_id")
     private RoomMember payer;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "created_by_user_id")
+    private User createdBy;
 
     private Long declaredTotal;
 
@@ -67,50 +64,30 @@ public class Receipt {
         this.requestFingerprint = fingerprint;
     }
 
+    public void recordCreator(User createdBy) {
+        this.createdBy = createdBy;
+    }
+
     private LocalDate purchasedAt;
 
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
-    private Receipt(
-        Room room,
-        String name,
-        ReceiptSourceType sourceType,
-        String storedPath,
-        String originalFilename,
-        String contentType,
-        Long fileSize
-    ) {
+    private Receipt(Room room, String name, ReceiptSourceType sourceType) {
         this.room = room;
         this.name = name;
         this.sourceType = sourceType;
-        this.storedPath = storedPath;
-        this.originalFilename = originalFilename;
-        this.contentType = contentType;
-        this.fileSize = fileSize;
     }
 
-    public static Receipt createImageUpload(
-        Room room,
-        String name,
-        String storedPath,
-        String originalFilename,
-        String contentType,
-        long fileSize
-    ) {
-        return new Receipt(
-            room,
-            name,
-            ReceiptSourceType.IMAGE_UPLOAD,
-            storedPath,
-            originalFilename,
-            contentType,
-            fileSize
-        );
+    public static Receipt createImageUpload(Room room, String name, User createdBy, RoomMember payer) {
+        Receipt receipt = new Receipt(room, name, ReceiptSourceType.IMAGE_UPLOAD);
+        receipt.createdBy = createdBy;
+        receipt.payer = payer;
+        return receipt;
     }
 
     public static Receipt createManual(Room room, String name, RoomMember payer, Long declaredTotal, LocalDate purchasedAt) {
-        Receipt receipt = new Receipt(room, name, ReceiptSourceType.MANUAL, null, null, null, null);
+        Receipt receipt = new Receipt(room, name, ReceiptSourceType.MANUAL);
         receipt.payer = payer;
         receipt.declaredTotal = declaredTotal;
         receipt.purchasedAt = purchasedAt;

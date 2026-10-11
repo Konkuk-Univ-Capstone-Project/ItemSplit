@@ -21,6 +21,7 @@ import org.springframework.web.multipart.MultipartFile;
 @RequiredArgsConstructor
 public class ReceiptController {
     private final ReceiptService receiptService;
+    private final ReceiptImageService receiptImageService;
 
     @GetMapping
     public ApiResponse<List<ReceiptService.ReceiptSummaryResult>> getReceipts(@PathVariable Long roomId,
@@ -35,11 +36,19 @@ public class ReceiptController {
     }
 
     @PostMapping(value = "/image", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public ResponseEntity<ApiResponse<ReceiptService.UploadReceiptImageResult>> uploadReceiptImage(@PathVariable Long roomId,
+    public ResponseEntity<ApiResponse<ReceiptImageService.UploadReceiptImageResult>> uploadReceiptImage(@PathVariable Long roomId,
         @AuthenticationPrincipal AuthenticatedUser user, @RequestPart("file") MultipartFile file,
         @RequestParam(required = false) String name) {
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.success(
-            receiptService.uploadReceiptImage(roomId, userId(user), file, name)));
+            receiptImageService.createReceiptWithImage(roomId, userId(user), file, name)));
+    }
+
+    @PostMapping(value = "/{receiptId}/images", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<ApiResponse<ReceiptImageService.ReceiptImageResult>> addReceiptImage(@PathVariable Long roomId,
+        @PathVariable Long receiptId, @AuthenticationPrincipal AuthenticatedUser user,
+        @RequestPart("file") MultipartFile file) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.success(
+            receiptImageService.addImage(roomId, receiptId, userId(user), file)));
     }
 
     @PostMapping("/manual")

@@ -19,7 +19,7 @@ class StorageCleanupServiceTest {
 	@Test
 	void rollbackRemovesNewUploadAfterTransactionEnds() throws Exception {
 		LocalStorageService storage = new LocalStorageService(root.toString());
-		StorageCleanupService cleanup = new StorageCleanupService(storage, root.toString());
+		StorageCleanupService cleanup = new StorageCleanupService(storage, root.resolve(".cleanup-pending").toString());
 		String path = upload(storage);
 		transaction().executeWithoutResult(status -> {
 			cleanup.deleteAfterRollback(path);
@@ -32,7 +32,7 @@ class StorageCleanupServiceTest {
 	@Test
 	void commitPreservesNewUpload() throws Exception {
 		LocalStorageService storage = new LocalStorageService(root.toString());
-		StorageCleanupService cleanup = new StorageCleanupService(storage, root.toString());
+		StorageCleanupService cleanup = new StorageCleanupService(storage, root.resolve(".cleanup-pending").toString());
 		String path = upload(storage);
 		transaction().executeWithoutResult(status -> cleanup.deleteAfterRollback(path));
 		assertThat(root.resolve(path)).exists();
@@ -41,7 +41,7 @@ class StorageCleanupServiceTest {
 	@Test
 	void failedDeletionSurvivesServiceRestartAndIsRetried() throws Exception {
 		LocalStorageService storage = new LocalStorageService(root.toString());
-		StorageCleanupService cleanup = new StorageCleanupService(storage, root.toString());
+		StorageCleanupService cleanup = new StorageCleanupService(storage, root.resolve(".cleanup-pending").toString());
 		String path = upload(storage);
 		Path target = root.resolve(path);
 		// A directory occupying the file path causes a real filesystem deletion failure.
@@ -54,7 +54,7 @@ class StorageCleanupServiceTest {
 		}
 		Files.delete(target);
 		Files.write(target, new byte[] {1, 2, 3});
-		new StorageCleanupService(storage, root.toString()).retryPendingDeletes();
+		new StorageCleanupService(storage, root.resolve(".cleanup-pending").toString()).retryPendingDeletes();
 		assertThat(target).doesNotExist();
 		try (var markers = Files.list(root.resolve(".cleanup-pending"))) {
 			assertThat(markers).isEmpty();
@@ -64,7 +64,7 @@ class StorageCleanupServiceTest {
 	@Test
 	void uploadWithoutTransactionFailsAndCleansTheNewFile() throws Exception {
 		LocalStorageService storage = new LocalStorageService(root.toString());
-		StorageCleanupService cleanup = new StorageCleanupService(storage, root.toString());
+		StorageCleanupService cleanup = new StorageCleanupService(storage, root.resolve(".cleanup-pending").toString());
 		String path = upload(storage);
 		assertThatThrownBy(() -> cleanup.deleteAfterRollback(path)).isInstanceOf(IllegalStateException.class);
 		assertThat(root.resolve(path)).doesNotExist();
@@ -77,6 +77,6 @@ class StorageCleanupServiceTest {
 
 	private String upload(LocalStorageService storage) throws Exception {
 		return storage.store("receipts/1",
-			new MockMultipartFile("file", "receipt.png", "image/png", new byte[] {1, 2, 3})).storedPath();
+			new MockMultipartFile("file", "receipt.png", "image/png", new byte[] {1, 2, 3}), "png", "image/png").storedPath();
 	}
 }

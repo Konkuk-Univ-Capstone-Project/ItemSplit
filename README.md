@@ -172,7 +172,7 @@ docker compose cp postgres:/tmp/itemsplit-backup.dump /tmp/itemsplit-backup.dump
 ./gradlew test
 ```
 
-일반 테스트는 H2에서 Hibernate가 만든 스키마로 실행하며 Flyway를 쓰지 않습니다. PostgreSQL 마이그레이션 테스트는 Docker가 켜져 있으면 격리된 `postgres:16-alpine` 컨테이너에서 실행되고, Docker가 없으면 건너뜁니다. 스크립트나 엔티티를 바꿨을 때는 Docker를 켜고 `FlywayStartupTest`(빈 DB에서 기동)와 `CommonContractMigrationTest`(기존 DB 변경)가 건너뛰어지지 않았는지 확인합니다.
+일반 테스트는 H2에서 Hibernate가 만든 스키마로 실행하며 Flyway를 쓰지 않습니다. PostgreSQL 마이그레이션 테스트는 Docker가 켜져 있으면 격리된 `postgres:16-alpine` 컨테이너에서 실행되고, Docker가 없으면 건너뜁니다. 스크립트나 엔티티를 바꿨을 때는 Docker를 켜고 `FlywayStartupTest`(빈 DB에서 기동)와 `CommonContractMigrationTest`·`ReceiptImageMigrationTest`(기존 DB 변경)가 건너뛰어지지 않았는지 확인합니다. S3 저장은 `S3StorageServiceTest`가 LocalStack 컨테이너(`localstack/localstack:3.8`)에서 검증하며 AWS 계정이 필요하지 않습니다.
 
 프론트엔드 타입 검사와 빌드는 아래 명령으로 실행합니다.
 
@@ -200,6 +200,14 @@ npm run build
 - `JWT_SECRET`
 
 운영 프로파일도 로컬과 같이 Flyway 적용 후 `ddl-auto=validate`로 동작합니다.
+
+### 이미지 저장소
+
+- 영수증 이미지는 JPEG·PNG만 받으며 파일 내용으로 형식을 확인합니다. 한 장에 10MB, 영수증 하나에 3장까지입니다.
+- `STORAGE_TYPE=local`(기본)은 `LOCAL_STORAGE_ROOT` 아래에 저장합니다.
+- `STORAGE_TYPE=s3`는 `S3_BUCKET`의 비공개 객체로 저장합니다. `S3_BUCKET`이 없으면 앱이 시작하지 않습니다. 리전은 `AWS_REGION`(기본 `ap-northeast-2`)입니다.
+- AWS 자격 증명은 SDK 기본 체인(인스턴스 역할, 환경 변수, 로컬 프로필)에서 읽습니다. 저장소와 `.env`에 키를 두지 않습니다.
+- 삭제에 실패한 파일의 재시도 기록은 `STORAGE_CLEANUP_QUEUE`(기본 `LOCAL_STORAGE_ROOT/.cleanup-pending`)에 둡니다. S3를 쓸 때도 컨테이너를 다시 만들어도 남는 볼륨 경로여야 합니다.
 
 ### 레이트리밋
 
@@ -233,6 +241,7 @@ npm run build
 - `GET /api/rooms/{roomId}/receipts`
 - `GET /api/rooms/{roomId}/receipts/{receiptId}`
 - `POST /api/rooms/{roomId}/receipts/image`
+- `POST /api/rooms/{roomId}/receipts/{receiptId}/images`
 - `POST /api/rooms/{roomId}/receipts/manual`
 - `PUT /api/rooms/{roomId}/receipts/{receiptId}`
 - `DELETE /api/rooms/{roomId}/receipts/{receiptId}`
