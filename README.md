@@ -141,30 +141,33 @@ curl.exe http://localhost:8080/actuator/health
 
 | 스크립트 | 내용 |
 |---|---|
-| `V1__baseline.sql` | Flyway 도입 전의 스키마. 빈 DB에서만 실행 |
-| `V2__common_contract.sql` | 공통 명세 변경(금액 `BIGINT`, 정산 제외, 요청 식별자, 금액 제약) |
+| `V1__baseline.sql` | 사용자·방·영수증·이미지·OCR 및 금액 제약을 포함한 현재 전체 스키마 |
+
+개발 DB를 초기화하는 시점에 기존 V1~V4를 하나의 V1로 통합했습니다. 이 기준선은 **빈 DB 전용**이며 기존 DB 자동 업그레이드를 지원하지 않습니다. `baseline-on-migrate=false`로 기존 구조를 잘못 버전 1로 표시하는 것을 막습니다.
 
 ### 스키마를 바꿀 때
 
 1. 엔티티를 수정합니다.
-2. 다음 번호로 `V{번호}__{설명}.sql`을 추가합니다.
-3. 이미 `main`에 들어간 스크립트는 고치지 않습니다. 내용이 달라지면 Flyway가 앱 시작을 막습니다. 고칠 내용은 새 스크립트로 추가합니다.
+2. 다음 변경부터 `V2__{설명}.sql`, `V3__{설명}.sql`처럼 새 번호를 추가합니다.
+3. 이번 개발 초기화 이후에는 공유·적용된 스크립트를 수정하지 않습니다. 고칠 내용은 새 스크립트로 추가합니다.
 
-### 기존 DB
+### 이전 개발 DB 초기화
 
-Flyway 도입 전에 만든 DB(기존 Docker 볼륨 포함)는 별도 작업 없이 앱을 시작하면 됩니다. 첫 시작 때 테이블이 이미 있는 DB를 버전 1로 표시하고 `V2`부터 적용합니다. `V2`는 공통 명세 SQL을 수동으로 적용한 DB, 적용하지 않은 DB, Hibernate가 일부 컬럼만 추가한 DB 모두에서 기존 값을 보존합니다. 스크립트 하나는 한 트랜잭션으로 실행되어, 실패하면 변경이 취소되고 앱이 시작하지 않습니다.
+기존 V1~V4를 적용한 팀원도 처음 한 번 DB를 초기화해야 합니다. 앱만 재시작하거나 `flyway repair`로 checksum만 바꾸면 안 됩니다. 보존할 데이터가 있는 DB에는 이 절차를 실행하지 않습니다.
 
-보존할 데이터가 있으면 시작 전에 백업합니다. 아래 예시는 macOS/Linux 셸 기준이며, 백업 파일을 Git에 추가하지 않습니다.
+아래는 기본 Compose 프로젝트 이름 `itemsplit`의 PostgreSQL 볼륨만 지우는 명령입니다. 다른 프로젝트 이름을 사용했다면 해당 볼륨 이름을 먼저 확인합니다. 이미지 저장소 볼륨까지 지우는 `docker compose down -v`는 사용하지 않습니다.
 
 ```bash
+docker compose stop app postgres
+docker compose rm -f postgres
+docker volume rm itemsplit_itemsplit-postgres-data
 docker compose up -d --wait postgres
-docker compose exec -T postgres sh -c 'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Fc -f /tmp/itemsplit-backup.dump'
-docker compose cp postgres:/tmp/itemsplit-backup.dump /tmp/itemsplit-backup.dump
+./gradlew bootRun
 ```
 
-시작이 스키마 검증에서 실패하면 그 DB는 `V1`보다 오래된 구조입니다. 데이터가 필요 없는 개발 DB는 `docker compose down -v`로 볼륨을 지우고 다시 시작합니다.
+앱 시작 시 빈 DB에 통합 V1이 실행되고 Hibernate 검증을 통과해야 합니다. DB 초기화로 기존 이미지 행도 사라지지만 로컬/S3 이미지 객체는 자동 삭제되지 않습니다. 필요 없는 개발 이미지 정리는 별도로 수행합니다.
 
-기존 금액 오류는 자동 보정하지 않으며 `db/migrations/001_common_contract_audit.sql`로 점검합니다.
+금액 데이터 점검 SQL은 `db/migrations/001_common_contract_audit.sql`에 있습니다.
 
 ## 테스트
 
@@ -172,7 +175,7 @@ docker compose cp postgres:/tmp/itemsplit-backup.dump /tmp/itemsplit-backup.dump
 ./gradlew test
 ```
 
-일반 테스트는 H2에서 Hibernate가 만든 스키마로 실행하며 Flyway를 쓰지 않습니다. PostgreSQL 마이그레이션 테스트는 Docker가 켜져 있으면 격리된 `postgres:16-alpine` 컨테이너에서 실행되고, Docker가 없으면 건너뜁니다. 스크립트나 엔티티를 바꿨을 때는 Docker를 켜고 `FlywayStartupTest`(빈 DB에서 기동)와 `CommonContractMigrationTest`·`ReceiptImageMigrationTest`(기존 DB 변경)가 건너뛰어지지 않았는지 확인합니다. S3 저장은 `S3StorageServiceTest`가 LocalStack 컨테이너(`localstack/localstack:3.8`)에서 검증하며 AWS 계정이 필요하지 않습니다.
+일반 테스트는 H2에서 Hibernate가 만든 스키마로 실행하며 Flyway를 쓰지 않습니다. PostgreSQL 마이그레이션 테스트는 Docker가 켜져 있으면 격리된 `postgres:16-alpine` 컨테이너에서 실행되고, Docker가 없으면 건너뜁니다. 스크립트나 엔티티를 바꿨을 때는 Docker를 켜고 `FlywayStartupTest`(빈 DB에서 기동)와 `BaselineMigrationTest`(테이블·제약·중복 실행·기존 DB 자동 baseline 차단)와 `OcrMigrationTest`(OCR 연쇄 삭제)가 건너뛰어지지 않았는지 확인합니다. S3 저장은 `S3StorageServiceTest`가 LocalStack 컨테이너(`localstack/localstack:3.8`)에서 검증하며 AWS 계정이 필요하지 않습니다.
 
 프론트엔드 타입 검사와 빌드는 아래 명령으로 실행합니다.
 
