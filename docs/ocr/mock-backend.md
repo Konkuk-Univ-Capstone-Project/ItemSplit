@@ -8,7 +8,7 @@
 
 ## 실행
 
-PostgreSQL만 준비한 뒤 실행한다. Flyway가 PR 23의 V3(이미지 메타데이터)와 V4(OCR 테이블)를 적용한다.
+PostgreSQL만 준비한 뒤 실행한다. Flyway가 이미지·OCR 테이블까지 포함한 통합 `V1__baseline.sql`을 빈 DB에 적용한다.
 
 ```sh
 docker compose up -d --wait postgres
@@ -105,14 +105,14 @@ STORAGE_TYPE=s3 S3_BUCKET=your-dev-bucket AWS_REGION=ap-northeast-2 \
 
 | 부분 | 통합 결과 |
 |---|---|
-| Flyway V3 중복 | PR 23의 `V3__receipt_images.sql`을 그대로 유지. 미커밋 OCR V3는 공통 테이블 생성 부분을 제거하고 `V4__ocr_draft_backend.sql`로 이동 |
+| Flyway 버전 | 개발 DB 초기화에 맞춰 기존 V1~V4의 최종 구조를 `V1__baseline.sql`로 통합. 이후 변경은 V2부터 추가 |
 | 생성자·이미지 엔티티 | PR 23의 `Receipt.createdBy` 관계, `ReceiptImage.create(..., StoredFile)`, 이미지 조회·삭제 경로로 통일. 생성자는 변경 불가 |
 | 업로드 응답 | PR 23의 `image`, `payerMemberId`, `createdByUserId` 계약 유지. 객체 키는 API에 노출하지 않음 |
 | 인식 이후 이미지 추가 | OCR 시작과 같은 방 잠금 아래 작업 존재 여부 검사. 저장소 쓰기 전 409 반환 |
 | 삭제 | PR 23이 이미지 객체 정리를 예약하고 이미지 행을 삭제. OCR 테이블 FK가 후보·작업·초안을 함께 정리 |
 | 기존 영수증 | 생성자 NULL은 보존. PR 23대로 방 멤버가 이미지 추가 가능하지만, OCR 소유권은 임의로 부여하지 않아 시작은 거부 |
 
-PR 23의 V3까지 적용된 DB는 다음 기동에 V4만 적용된다. **이전 작업의 미커밋 `V3__ocr_draft_backend.sql`을 이미 적용한 개발 DB라면 그대로 기동할 수 없다.** 버전 3의 의미와 checksum이 달라졌으므로 데이터 백업 후 개발 DB 재생성 또는 별도 이전이 필요하다. 기존 데이터를 자동 삭제하거나 `flyway repair`로 이력을 덮어쓰지 않는다.
+기존 V1~V4 이력이 남은 개발 DB는 **초기화 후 실행**해야 한다. `baseline-on-migrate=false`이며 기존 DB를 자동 변환하지 않는다. 팀원도 동일하게 초기화해야 한다. DB 볼륨만 지우는 명령과 이미지 파일 보존에 관한 설명은 [README의 DB 초기화 절차](../../README.md#이전-개발-db-초기화)를 따른다.
 
 ### CLOVA 담당
 
@@ -127,4 +127,4 @@ PR 23의 V3까지 적용된 DB는 다음 기동에 V4만 적용된다. **이전 
 ./gradlew test
 ```
 
-H2 테스트는 실제 인증·요청·비동기 처리·DB 저장과 권한/경로/중복/실패/삭제를 검사한다. PostgreSQL Testcontainers 테스트는 Docker가 필요하며 빈 DB의 V1~V4 기동·검증, V2→V3 이미지 이전, PR 23 V3→OCR V4 이전과 삭제를 검사한다. `OcrS3IntegrationTest`는 LocalStack을 사용해 실제 S3 구현체의 3장 저장·읽기→OCR 초안→영수증/방 삭제와 객체 없음 오류를 검사한다. 합성 응답은 실제 인식 정확도나 AWS/CLOVA 통신 성공을 증명하지 않는다.
+H2 테스트는 실제 인증·요청·비동기 처리·DB 저장과 권한/경로/중복/실패/삭제를 검사한다. PostgreSQL Testcontainers 테스트는 Docker가 필요하며 빈 DB의 통합 V1 기동·검증, 금액/관계 제약, 반복 실행, 기존 DB 자동 baseline 차단과 삭제를 검사한다. `OcrS3IntegrationTest`는 LocalStack을 사용해 실제 S3 구현체의 3장 저장·읽기→OCR 초안→영수증/방 삭제와 객체 없음 오류를 검사한다. 합성 응답은 실제 인식 정확도나 AWS/CLOVA 통신 성공을 증명하지 않는다.

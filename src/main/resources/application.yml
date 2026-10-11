@@ -16,9 +16,8 @@ spring:
     hibernate:
       ddl-auto: validate
   flyway:
-    # A database created before Flyway already has the V1 tables: mark it as version 1 and continue from V2.
-    baseline-on-migrate: true
-    baseline-version: 1
+    # The consolidated V1 must run on an empty DB; never silently baseline an old schema.
+    baseline-on-migrate: false
 
 management:
   endpoints:
