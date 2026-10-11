@@ -158,17 +158,17 @@ class CommonContractMigrationTest {
         }
     }
 
-    // Same settings the application starts with: an existing schema is baselined at V1, then V2 runs.
-    // Stops at V2 because these cases start from cut-down schemas that later versions do not apply to.
+    // V2 regression fixture intentionally contains only the old contract tables.
+    // Later schema migrations are covered by startup and dedicated upgrade tests.
     private void migrate() {
         var yaml = new org.springframework.beans.factory.config.YamlPropertiesFactoryBean();
         yaml.setResources(new org.springframework.core.io.ClassPathResource("application.yml"));
         var properties = java.util.Objects.requireNonNull(yaml.getObject());
         Flyway.configure()
+                .target("2")
                 .dataSource(postgres.getJdbcUrl(), postgres.getUsername(), postgres.getPassword())
                 .baselineOnMigrate(Boolean.parseBoolean(properties.getProperty("spring.flyway.baseline-on-migrate")))
                 .baselineVersion(properties.getProperty("spring.flyway.baseline-version"))
-                .target("2")
                 .load()
                 .migrate();
     }

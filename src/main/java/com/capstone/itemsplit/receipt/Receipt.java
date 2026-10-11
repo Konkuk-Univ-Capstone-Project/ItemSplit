@@ -48,7 +48,7 @@ public class Receipt {
     private RoomMember payer;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "created_by_user_id")
+    @JoinColumn(name = "created_by_user_id", updatable = false)
     private User createdBy;
 
     private Long declaredTotal;
@@ -65,7 +65,8 @@ public class Receipt {
     }
 
     public void recordCreator(User createdBy) {
-        this.createdBy = createdBy;
+        if (this.createdBy != null) throw new IllegalStateException("Receipt creator is immutable");
+        this.createdBy = java.util.Objects.requireNonNull(createdBy);
     }
 
     private LocalDate purchasedAt;

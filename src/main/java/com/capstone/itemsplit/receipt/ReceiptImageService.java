@@ -33,12 +33,14 @@ public class ReceiptImageService {
     private final StorageService storageService;
     private final StorageCleanupService storageCleanupService;
     private final DataSize maxImageSize;
+    private final com.capstone.itemsplit.ocr.OcrJobRepository ocrJobs;
 
     public ReceiptImageService(ReceiptRepository receiptRepository, ReceiptImageRepository receiptImageRepository,
         RoomMemberRepository roomMemberRepository, UserRepository userRepository,
         RoomAuthorizationService roomAuthorizationService, StorageService storageService,
         StorageCleanupService storageCleanupService,
-        @Value("${spring.servlet.multipart.max-file-size}") DataSize maxImageSize) {
+        @Value("${spring.servlet.multipart.max-file-size}") DataSize maxImageSize,
+        com.capstone.itemsplit.ocr.OcrJobRepository ocrJobs) {
         this.receiptRepository = receiptRepository;
         this.receiptImageRepository = receiptImageRepository;
         this.roomMemberRepository = roomMemberRepository;
@@ -47,6 +49,7 @@ public class ReceiptImageService {
         this.storageService = storageService;
         this.storageCleanupService = storageCleanupService;
         this.maxImageSize = maxImageSize;
+        this.ocrJobs = ocrJobs;
     }
 
     /** Creates an image receipt from its first image. The uploader becomes its creator and default payer. */
@@ -75,6 +78,10 @@ public class ReceiptImageService {
         // Receipts created before the creator was recorded stay editable by any member.
         if (receipt.getCreatedBy() != null && !receipt.getCreatedBy().getId().equals(userId)) {
             throw new ApiException(ErrorCode.FORBIDDEN, "영수증을 올린 사람만 이미지를 추가할 수 있습니다.");
+        }
+        // OCR start takes this same room lock; no upload can race the job's image snapshot.
+        if (ocrJobs.existsByReceiptId(receiptId)) {
+            throw new ApiException(ErrorCode.CONFLICT, "인식을 시작한 영수증에는 이미지를 추가할 수 없습니다.");
         }
         // The room lock above serializes uploads, so concurrent requests cannot both pass this check.
         long count = receiptImageRepository.countByReceiptId(receiptId);

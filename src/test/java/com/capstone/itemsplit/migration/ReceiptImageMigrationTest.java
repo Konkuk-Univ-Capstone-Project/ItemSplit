@@ -37,7 +37,7 @@ class ReceiptImageMigrationTest {
 
     @Test
     void copiesExistingImagesAsTheFirstImageOfTheirReceipt() throws Exception {
-        flyway(null).migrate();
+        flyway("3").migrate();
 
         assertThat(value("SELECT count(*) FROM receipt_images")).isEqualTo("2");
         assertThat(value("""
@@ -52,7 +52,7 @@ class ReceiptImageMigrationTest {
 
     @Test
     void keepsExistingReceiptsWithoutACreatorAndLeavesTheOldColumns() throws Exception {
-        flyway(null).migrate();
+        flyway("3").migrate();
 
         assertThat(value("SELECT count(*) FROM receipts WHERE created_by_user_id IS NULL")).isEqualTo("3");
         assertThat(value("SELECT stored_path FROM receipts WHERE id = 1")).isEqualTo("receipts/1/abc.png");

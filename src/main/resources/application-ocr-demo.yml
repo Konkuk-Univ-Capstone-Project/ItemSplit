@@ -1,0 +1,7 @@
+# CLOVA is synthetic. Storage is the real local/S3 implementation selected by STORAGE_TYPE.
+app:
+  ocr:
+    enabled: true
+    image-source: storage
+    provider: fake
+    demo-enabled: true

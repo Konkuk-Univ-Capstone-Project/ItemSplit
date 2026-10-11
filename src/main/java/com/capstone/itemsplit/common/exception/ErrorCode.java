@@ -4,6 +4,8 @@ import org.springframework.http.HttpStatus;
 
 public enum ErrorCode {
 
+	CONFLICT(HttpStatus.CONFLICT, "The request conflicts with the current state."),
+
 	UNAUTHORIZED(HttpStatus.UNAUTHORIZED, "Authentication is required."),
 	FORBIDDEN(HttpStatus.FORBIDDEN, "You do not have permission to access this resource."),
 	NOT_FOUND(HttpStatus.NOT_FOUND, "The requested resource was not found."),

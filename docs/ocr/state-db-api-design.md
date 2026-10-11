@@ -1,5 +1,7 @@
 # 이미지·OCR 상태 관리, DB 및 API 최종 설계
 
+현재 구현된 PR 23 저장소(local/S3)·가짜 CLOVA 기반 인식 시작/조회/재시도 범위와 실행 방법은 [OCR 백엔드 개발 가이드](mock-backend.md)를 참고한다. 이 문서 전체가 구현된 것은 아니다.
+
 영수증 이미지의 OCR 처리 상태, 검토 초안을 담을 테이블, 인식 시작부터 영수증 반영까지의 API와 트랜잭션 경계, 이미지 영수증의 수정 권한과 수정 요청을 정리한다. [week4 원본 보고서](../../report/backend-ocr-draft-design/week4-ocr-state-db-api-design.md)의 최종 결정을 기준으로 정리한 현재 설계다. DB 변경 절차는 PR #20의 Flyway 전환을 반영한다. OCR 정책·DB·API를 변경할 때는 이 문서와 관련 상세 명세를 함께 갱신한다. 설계 채택은 구현 완료를 뜻하지 않으며, 12장의 미결정 사항은 그대로 남는다.
 
 [OCR 추출·수정 화면 요구사항](ocr-extraction-review-requirements.md)은 화면 동작을, [CLOVA OCR 연동 설계](clova-ocr-integration-design.md)는 공급자 호출·응답 매핑을 상세화한다. 이미지 저장은 [S3 저장 설계](../storage/image-storage-design.md)를 따른다. [공통 계약](../api-db-contract.md)의 금액 상한·멤버 ID·원자적 저장 규칙은 유지하되, 총액 입력·불일치 정산 차단과 수정 권한은 이 문서의 변경안을 우선한다. 공통 계약에 반영할 내용은 11장에 정리한다. 확정되지 않은 전제는 **[가정]** 으로 표시했다.

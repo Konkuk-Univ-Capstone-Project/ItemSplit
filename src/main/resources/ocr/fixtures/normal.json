@@ -1,0 +1,343 @@
+{
+  "version": "V2",
+  "requestId": "synthetic-receipt-fixture",
+  "timestamp": 1791676800000,
+  "images": [
+    {
+      "uid": "synthetic-image",
+      "name": "synthetic-receipt",
+      "inferResult": "SUCCESS",
+      "message": "SUCCESS",
+      "validationResult": {
+        "result": "NO_REQUESTED"
+      },
+      "receipt": {
+        "meta": {
+          "estimatedLanguage": "ko"
+        },
+        "result": {
+          "storeInfo": {
+            "name": {
+              "text": "테스트 식당",
+              "formatted": {
+                "value": "테스트 식당"
+              },
+              "confidenceScore": 0.98,
+              "boundingPolys": [
+                {
+                  "vertices": [
+                    {
+                      "x": 10.0,
+                      "y": 20.0
+                    },
+                    {
+                      "x": 110.0,
+                      "y": 20.0
+                    },
+                    {
+                      "x": 110.0,
+                      "y": 40.0
+                    },
+                    {
+                      "x": 10.0,
+                      "y": 40.0
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          "paymentInfo": {
+            "date": {
+              "text": "2026-10-11",
+              "formatted": {
+                "year": "2026",
+                "month": "10",
+                "day": "11"
+              },
+              "confidenceScore": 0.99,
+              "boundingPolys": []
+            }
+          },
+          "subResults": [
+            {
+              "items": [
+                {
+                  "name": {
+                    "text": "국밥",
+                    "formatted": {
+                      "value": "국밥"
+                    },
+                    "confidenceScore": 0.98,
+                    "boundingPolys": [
+                      {
+                        "vertices": [
+                          {
+                            "x": 10.0,
+                            "y": 20.0
+                          },
+                          {
+                            "x": 110.0,
+                            "y": 20.0
+                          },
+                          {
+                            "x": 110.0,
+                            "y": 40.0
+                          },
+                          {
+                            "x": 10.0,
+                            "y": 40.0
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  "count": {
+                    "text": "2",
+                    "formatted": {
+                      "value": "2"
+                    },
+                    "confidenceScore": 0.98,
+                    "boundingPolys": [
+                      {
+                        "vertices": [
+                          {
+                            "x": 10.0,
+                            "y": 20.0
+                          },
+                          {
+                            "x": 110.0,
+                            "y": 20.0
+                          },
+                          {
+                            "x": 110.0,
+                            "y": 40.0
+                          },
+                          {
+                            "x": 10.0,
+                            "y": 40.0
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  "price": {
+                    "unitPrice": {
+                      "text": "8,000",
+                      "formatted": {
+                        "value": "8000"
+                      },
+                      "confidenceScore": 0.98,
+                      "boundingPolys": [
+                        {
+                          "vertices": [
+                            {
+                              "x": 10.0,
+                              "y": 20.0
+                            },
+                            {
+                              "x": 110.0,
+                              "y": 20.0
+                            },
+                            {
+                              "x": 110.0,
+                              "y": 40.0
+                            },
+                            {
+                              "x": 10.0,
+                              "y": 40.0
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    "price": {
+                      "text": "16,000",
+                      "formatted": {
+                        "value": "16000"
+                      },
+                      "confidenceScore": 0.98,
+                      "boundingPolys": [
+                        {
+                          "vertices": [
+                            {
+                              "x": 10.0,
+                              "y": 20.0
+                            },
+                            {
+                              "x": 110.0,
+                              "y": 20.0
+                            },
+                            {
+                              "x": 110.0,
+                              "y": 40.0
+                            },
+                            {
+                              "x": 10.0,
+                              "y": 40.0
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  }
+                },
+                {
+                  "name": {
+                    "text": "음료",
+                    "formatted": {
+                      "value": "음료"
+                    },
+                    "confidenceScore": 0.98,
+                    "boundingPolys": [
+                      {
+                        "vertices": [
+                          {
+                            "x": 10.0,
+                            "y": 20.0
+                          },
+                          {
+                            "x": 110.0,
+                            "y": 20.0
+                          },
+                          {
+                            "x": 110.0,
+                            "y": 40.0
+                          },
+                          {
+                            "x": 10.0,
+                            "y": 40.0
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  "count": {
+                    "text": "2",
+                    "formatted": {
+                      "value": "2"
+                    },
+                    "confidenceScore": 0.98,
+                    "boundingPolys": [
+                      {
+                        "vertices": [
+                          {
+                            "x": 10.0,
+                            "y": 20.0
+                          },
+                          {
+                            "x": 110.0,
+                            "y": 20.0
+                          },
+                          {
+                            "x": 110.0,
+                            "y": 40.0
+                          },
+                          {
+                            "x": 10.0,
+                            "y": 40.0
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  "price": {
+                    "unitPrice": {
+                      "text": "1,000",
+                      "formatted": {
+                        "value": "1000"
+                      },
+                      "confidenceScore": 0.98,
+                      "boundingPolys": [
+                        {
+                          "vertices": [
+                            {
+                              "x": 10.0,
+                              "y": 20.0
+                            },
+                            {
+                              "x": 110.0,
+                              "y": 20.0
+                            },
+                            {
+                              "x": 110.0,
+                              "y": 40.0
+                            },
+                            {
+                              "x": 10.0,
+                              "y": 40.0
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    "price": {
+                      "text": "2,000",
+                      "formatted": {
+                        "value": "2000"
+                      },
+                      "confidenceScore": 0.98,
+                      "boundingPolys": [
+                        {
+                          "vertices": [
+                            {
+                              "x": 10.0,
+                              "y": 20.0
+                            },
+                            {
+                              "x": 110.0,
+                              "y": 20.0
+                            },
+                            {
+                              "x": 110.0,
+                              "y": 40.0
+                            },
+                            {
+                              "x": 10.0,
+                              "y": 40.0
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  }
+                }
+              ]
+            }
+          ],
+          "totalPrice": {
+            "price": {
+              "text": "18,000",
+              "formatted": {
+                "value": "18000"
+              },
+              "confidenceScore": 0.98,
+              "boundingPolys": [
+                {
+                  "vertices": [
+                    {
+                      "x": 10.0,
+                      "y": 20.0
+                    },
+                    {
+                      "x": 110.0,
+                      "y": 20.0
+                    },
+                    {
+                      "x": 110.0,
+                      "y": 40.0
+                    },
+                    {
+                      "x": 10.0,
+                      "y": 40.0
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        }
+      }
+    }
+  ]
+}
