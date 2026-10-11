@@ -1,7 +1,7 @@
 package com.capstone.itemsplit.storage;
 
 import com.capstone.itemsplit.receipt.ReceiptRepository;
-import com.capstone.itemsplit.receipt.ReceiptService;
+import com.capstone.itemsplit.receipt.ReceiptImageService;
 import com.capstone.itemsplit.room.Room;
 import com.capstone.itemsplit.room.RoomMember;
 import com.capstone.itemsplit.room.RoomMemberRepository;
@@ -39,7 +39,7 @@ class PartialUploadCleanupTest {
 		registry.add("app.storage.local.root-path", () -> storageRoot.toString());
 	}
 
-	@Autowired private ReceiptService receiptService;
+	@Autowired private ReceiptImageService receiptImageService;
 	@Autowired private ReceiptRepository receiptRepository;
 	@Autowired private RoomRepository roomRepository;
 	@Autowired private RoomMemberRepository roomMemberRepository;
@@ -53,9 +53,16 @@ class PartialUploadCleanupTest {
 		Room room = roomRepository.save(Room.create("Files", owner));
 		roomMemberRepository.save(RoomMember.create(room, owner));
 		storage.failDeletion = true;
-		MockMultipartFile interrupted = new MockMultipartFile("file", "receipt.png", "image/png", new byte[] {1}) {
+		byte[] png = {(byte) 0x89, 'P', 'N', 'G', 0x0D, 0x0A, 0x1A, 0x0A};
+		// The first read checks the format; the second is the copy into storage, which breaks off.
+		MockMultipartFile interrupted = new MockMultipartFile("file", "receipt.png", "image/png", png) {
+			private boolean formatChecked;
 			@Override
-			public InputStream getInputStream() {
+			public InputStream getInputStream() throws IOException {
+				if (!formatChecked) {
+					formatChecked = true;
+					return super.getInputStream();
+				}
 				return new InputStream() {
 					private boolean first = true;
 					@Override public int read() throws IOException {
@@ -66,7 +73,7 @@ class PartialUploadCleanupTest {
 			}
 		};
 
-		assertThatThrownBy(() -> receiptService.uploadReceiptImage(room.getId(), owner.getId(), interrupted, "Receipt"))
+		assertThatThrownBy(() -> receiptImageService.createReceiptWithImage(room.getId(), owner.getId(), interrupted, "Receipt"))
 			.isInstanceOf(com.capstone.itemsplit.common.exception.ApiException.class);
 		assertThat(receiptRepository.findAllByRoomId(room.getId())).isEmpty();
 		Path receiptDirectory = storageRoot.resolve("receipts/" + room.getId());

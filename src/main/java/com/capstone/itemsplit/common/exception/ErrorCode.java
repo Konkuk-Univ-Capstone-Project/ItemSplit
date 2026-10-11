@@ -8,6 +8,7 @@ public enum ErrorCode {
 	FORBIDDEN(HttpStatus.FORBIDDEN, "You do not have permission to access this resource."),
 	NOT_FOUND(HttpStatus.NOT_FOUND, "The requested resource was not found."),
 	VALIDATION_ERROR(HttpStatus.BAD_REQUEST, "The request contains invalid values."),
+	PAYLOAD_TOO_LARGE(HttpStatus.PAYLOAD_TOO_LARGE, "The uploaded file is too large."),
 	TOO_MANY_REQUESTS(HttpStatus.TOO_MANY_REQUESTS, "Too many requests. Please try again later."),
 	INTERNAL_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "An unexpected error occurred.");
 

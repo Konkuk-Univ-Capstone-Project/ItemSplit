@@ -8,12 +8,10 @@ import com.capstone.itemsplit.assignment.AssignmentRepository;
 import com.capstone.itemsplit.item.Item;
 import com.capstone.itemsplit.item.ItemRepository;
 import com.capstone.itemsplit.room.*;
-import com.capstone.itemsplit.storage.StorageService;
 import com.capstone.itemsplit.storage.StorageCleanupService;
-import com.capstone.itemsplit.storage.PartialStorageException;
+import com.capstone.itemsplit.user.UserRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.IOException;
-import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.LocalDate;
@@ -23,8 +21,6 @@ import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.util.StringUtils;
-import org.springframework.web.multipart.MultipartFile;
 
 @Service
 @RequiredArgsConstructor
@@ -36,44 +32,10 @@ public class ReceiptService {
     private final RoomMemberRepository roomMemberRepository;
     private final RoomAuthorizationService roomAuthorizationService;
     private final ReceiptAmountValidator amountValidator;
-    private final StorageService storageService;
+    private final ReceiptImageRepository receiptImageRepository;
+    private final UserRepository userRepository;
     private final StorageCleanupService storageCleanupService;
     private final ObjectMapper objectMapper;
-
-	@Transactional
-	public UploadReceiptImageResult uploadReceiptImage(
-		Long roomId,
-		Long userId,
-		MultipartFile file,
-		String name
-	) {
-		Room room = roomAuthorizationService.checkMemberForUpdate(roomId, userId);
-
-		validateImageFile(file);
-
-		try {
-			StorageService.StoredFile storedFile = storageService.store("receipts/" + roomId, file);
-            storageCleanupService.deleteAfterRollback(storedFile.storedPath());
-			String receiptName = resolveReceiptName(name, storedFile.originalFilename());
-
-			Receipt receipt = receiptRepository.save(Receipt.createImageUpload(
-				room,
-				receiptName,
-				storedFile.storedPath(),
-				storedFile.originalFilename(),
-				storedFile.contentType(),
-				storedFile.size()
-			));
-
-			return UploadReceiptImageResult.from(receipt);
-        } catch (PartialStorageException exception) {
-            storageCleanupService.deleteAfterRollback(exception.storedPath());
-            throw new ApiException(ErrorCode.INTERNAL_ERROR, "Failed to store the receipt image.");
-		} catch (IOException exception) {
-			throw new ApiException(ErrorCode.INTERNAL_ERROR, "Failed to store the receipt image.");
-		}
-	}
-
 
     @Transactional
     public ReceiptDetailResult createManualReceipt(Long roomId, Long userId, String requestId,
@@ -93,6 +55,7 @@ public class ReceiptService {
         validateCommands(roomId, null, commands);
         Receipt receipt = Receipt.createManual(room, name.trim(), payer, declaredTotal, purchasedAt);
         receipt.identifyCreation(requestId, fingerprint);
+        receipt.recordCreator(userRepository.getReferenceById(userId));
         receiptRepository.save(receipt);
         replaceItems(roomId, receipt, commands);
         return detail(receipt);
@@ -183,7 +146,9 @@ public class ReceiptService {
     public void deleteReceipt(Long roomId, Long receiptId, Long userId) {
         roomAuthorizationService.checkMemberForUpdate(roomId, userId);
         Receipt receipt = findReceiptInRoom(roomId, receiptId);
-        storageCleanupService.deleteAfterCommit(receipt.getStoredPath());
+        receiptImageRepository.findAllByReceiptId(receiptId)
+            .forEach(image -> storageCleanupService.deleteAfterCommit(image.getStoredPath()));
+        receiptImageRepository.deleteAllByReceiptId(receiptId);
         List<Long> itemIds = itemRepository.findAllByReceiptId(receiptId).stream().map(Item::getId).toList();
         if (!itemIds.isEmpty()) assignmentRepository.deleteAllByItemIdIn(itemIds);
         itemRepository.deleteAllByReceiptId(receiptId);
@@ -244,31 +209,6 @@ public class ReceiptService {
         List<ReceiptItemResult> items, String warning) { }
     public record ReceiptItemResult(Long itemId, String name, long price, int quantity, boolean excludedFromSettlement, List<Long> memberIds) { }
 
-	private void validateImageFile(MultipartFile file) {
-		if (file == null || file.isEmpty()) {
-			throw new ApiException(ErrorCode.VALIDATION_ERROR, "Receipt image file is required.");
-		}
-
-		String contentType = file.getContentType();
-		if (!StringUtils.hasText(contentType) || !contentType.toLowerCase(Locale.ROOT).startsWith("image/")) {
-			throw new ApiException(ErrorCode.VALIDATION_ERROR, "Only image files can be uploaded.");
-		}
-	}
-
-	private String resolveReceiptName(String name, String originalFilename) {
-		if (StringUtils.hasText(name)) {
-			return name.trim();
-		}
-
-		String filename = Path.of(originalFilename).getFileName().toString();
-		int extensionIndex = filename.lastIndexOf('.');
-		if (extensionIndex > 0) {
-			return filename.substring(0, extensionIndex);
-		}
-
-		return filename;
-	}
-
 	public record ReceiptSummaryResult(
 		Long receiptId,
 		Long roomId,
@@ -292,32 +232,6 @@ public class ReceiptService {
 				receipt.getDeclaredTotal(),
 				receipt.getPurchasedAt(),
 				receipt.getCreatedAt()
-			);
-		}
-
-	}
-
-	public record UploadReceiptImageResult(
-		Long receiptId,
-		Long roomId,
-		String name,
-		ReceiptSourceType sourceType,
-		String storedPath,
-		String originalFilename,
-		String contentType,
-		Long fileSize
-	) {
-
-		private static UploadReceiptImageResult from(Receipt receipt) {
-			return new UploadReceiptImageResult(
-				receipt.getId(),
-				receipt.getRoom().getId(),
-				receipt.getName(),
-				receipt.getSourceType(),
-				receipt.getStoredPath(),
-				receipt.getOriginalFilename(),
-				receipt.getContentType(),
-				receipt.getFileSize()
 			);
 		}
 

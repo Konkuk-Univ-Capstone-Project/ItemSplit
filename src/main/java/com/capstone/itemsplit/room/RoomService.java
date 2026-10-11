@@ -6,6 +6,7 @@ import com.capstone.itemsplit.assignment.AssignmentRepository;
 import com.capstone.itemsplit.item.Item;
 import com.capstone.itemsplit.item.ItemRepository;
 import com.capstone.itemsplit.receipt.Receipt;
+import com.capstone.itemsplit.receipt.ReceiptImageRepository;
 import com.capstone.itemsplit.receipt.ReceiptRepository;
 import com.capstone.itemsplit.storage.StorageCleanupService;
 import com.capstone.itemsplit.user.User;
@@ -28,6 +29,7 @@ public class RoomService {
 	private final AssignmentRepository assignmentRepository;
 	private final ItemRepository itemRepository;
 	private final ReceiptRepository receiptRepository;
+	private final ReceiptImageRepository receiptImageRepository;
 	private final StorageCleanupService storageCleanupService;
 	private final RoomInviteTokenRepository roomInviteTokenRepository;
 	private final RoomShareTokenRepository roomShareTokenRepository;
@@ -63,11 +65,13 @@ public class RoomService {
 		}
 
 		List<Receipt> receipts = receiptRepository.findAllByRoomId(roomId);
-		receipts.forEach(receipt -> storageCleanupService.deleteAfterCommit(receipt.getStoredPath()));
 		List<Long> receiptIds = receipts.stream()
 			.map(Receipt::getId)
 			.toList();
 		if (!receiptIds.isEmpty()) {
+			receiptImageRepository.findAllByReceiptIdIn(receiptIds)
+				.forEach(image -> storageCleanupService.deleteAfterCommit(image.getStoredPath()));
+			receiptImageRepository.deleteAllByReceiptIdIn(receiptIds);
 			List<Long> itemIds = itemRepository.findAllByReceiptIdIn(receiptIds).stream()
 				.map(Item::getId)
 				.toList();

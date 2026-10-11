@@ -8,14 +8,14 @@ import java.nio.file.InvalidPathException;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
-import java.util.Locale;
-import java.util.UUID;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
 
 @Service
+@ConditionalOnProperty(name = "app.storage.type", havingValue = "local", matchIfMissing = true)
 public class LocalStorageService implements StorageService {
 
 	private final Path rootPath;
@@ -25,14 +25,13 @@ public class LocalStorageService implements StorageService {
 	}
 
 	@Override
-	public StoredFile store(String directory, MultipartFile file) throws IOException {
+	public StoredFile store(String directory, MultipartFile file, String extension, String contentType) throws IOException {
 		Path targetDirectory = resolveScopedPath(directory);
 		Files.createDirectories(targetDirectory);
 		assertNoSymbolicLinks(targetDirectory);
 
-		String originalFilename = resolveOriginalFilename(file.getOriginalFilename());
-		String storedFilename = generateStoredFilename(originalFilename);
-		Path targetFile = targetDirectory.resolve(storedFilename).normalize();
+		String originalFilename = StoredFilenames.original(file.getOriginalFilename());
+		Path targetFile = targetDirectory.resolve(StoredFilenames.generate(extension)).normalize();
 
 		if (!targetFile.startsWith(rootPath)) {
 			throw new IOException("Invalid storage path.");
@@ -51,10 +50,6 @@ public class LocalStorageService implements StorageService {
 			throw exception;
 		}
 
-		String contentType = StringUtils.hasText(file.getContentType())
-			? file.getContentType()
-			: "application/octet-stream";
-
 		return new StoredFile(storedPath, originalFilename, contentType, file.getSize());
 	}
 
@@ -65,6 +60,11 @@ public class LocalStorageService implements StorageService {
 			throw new IOException("Storage deletion requires a file path.");
 		}
 		Files.deleteIfExists(target);
+	}
+
+	@Override
+	public byte[] read(String storedPath) throws IOException {
+		return Files.readAllBytes(resolveScopedPath(storedPath));
 	}
 
 	private Path resolveScopedPath(String value) throws IOException {
@@ -100,30 +100,6 @@ public class LocalStorageService implements StorageService {
 				throw new IOException("Symbolic links are not allowed inside storage.");
 			}
 		}
-	}
-
-	private String resolveOriginalFilename(String originalFilename) {
-		String cleanedFilename = StringUtils.hasText(originalFilename)
-			? StringUtils.cleanPath(originalFilename)
-			: "upload";
-		Path filenamePath = Path.of(cleanedFilename).getFileName();
-
-		if (filenamePath == null || !StringUtils.hasText(filenamePath.toString())) {
-			return "upload";
-		}
-
-		return filenamePath.toString();
-	}
-
-	private String generateStoredFilename(String originalFilename) {
-		String extension = StringUtils.getFilenameExtension(originalFilename);
-		String uuid = UUID.randomUUID().toString().replace("-", "");
-
-		if (!StringUtils.hasText(extension)) {
-			return uuid;
-		}
-
-		return uuid + "." + extension.toLowerCase(Locale.ROOT);
 	}
 
 }

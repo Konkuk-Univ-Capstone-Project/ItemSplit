@@ -7,6 +7,7 @@ import com.capstone.itemsplit.room.RoomRepository;
 import com.capstone.itemsplit.user.User;
 import com.capstone.itemsplit.user.UserRepository;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -33,6 +34,8 @@ class ReceiptStorageCleanupTest {
 	}
 
 	@Autowired private ReceiptService receiptService;
+	@Autowired private ReceiptImageService receiptImageService;
+	@Autowired private ReceiptImageRepository receiptImageRepository;
 	@Autowired private ReceiptRepository receiptRepository;
 	@Autowired private RoomRepository roomRepository;
 	@Autowired private RoomMemberRepository roomMemberRepository;
@@ -42,49 +45,62 @@ class ReceiptStorageCleanupTest {
 	@Test
 	void receiptDeletionRemovesOriginalFileAfterCommit() {
 		Fixture fixture = fixture();
-		ReceiptService.UploadReceiptImageResult uploaded = upload(fixture);
-		Path original = storageRoot.resolve(uploaded.storedPath());
-		assertThat(original).exists();
+		ReceiptImageService.UploadReceiptImageResult uploaded = upload(fixture);
+		receiptImageService.addImage(fixture.roomId(), uploaded.receiptId(), fixture.ownerId(), image());
+		List<Path> originals = storedFiles(uploaded.receiptId());
+		assertThat(originals).hasSize(2).allSatisfy(original -> assertThat(original).exists());
 		new TransactionTemplate(transactionManager).executeWithoutResult(status -> {
 			receiptService.deleteReceipt(fixture.roomId(), uploaded.receiptId(), fixture.ownerId());
-			assertThat(original).exists();
+			assertThat(originals).allSatisfy(original -> assertThat(original).exists());
 		});
 		assertThat(receiptRepository.findById(uploaded.receiptId())).isEmpty();
-		assertThat(original).doesNotExist();
+		assertThat(receiptImageRepository.countByReceiptId(uploaded.receiptId())).isZero();
+		assertThat(originals).allSatisfy(original -> assertThat(original).doesNotExist());
 	}
 
 	@Test
 	void receiptDeletionRollbackPreservesRecordAndOriginalFile() {
 		Fixture fixture = fixture();
-		ReceiptService.UploadReceiptImageResult uploaded = upload(fixture);
-		Path original = storageRoot.resolve(uploaded.storedPath());
+		ReceiptImageService.UploadReceiptImageResult uploaded = upload(fixture);
+		Path original = storedFiles(uploaded.receiptId()).get(0);
 		new TransactionTemplate(transactionManager).executeWithoutResult(status -> {
 			receiptService.deleteReceipt(fixture.roomId(), uploaded.receiptId(), fixture.ownerId());
 			assertThat(original).exists();
 			status.setRollbackOnly();
 		});
 		assertThat(receiptRepository.findById(uploaded.receiptId())).isPresent();
+		assertThat(receiptImageRepository.countByReceiptId(uploaded.receiptId())).isEqualTo(1);
 		assertThat(original).exists();
 	}
 
 	@Test
 	void uploadRollbackRemovesTheNewFileAndDatabaseRecord() {
 		Fixture fixture = fixture();
-		ReceiptService.UploadReceiptImageResult uploaded = new TransactionTemplate(transactionManager).execute(status -> {
-			ReceiptService.UploadReceiptImageResult result = upload(fixture);
-			assertThat(storageRoot.resolve(result.storedPath())).exists();
+		Path stored = new TransactionTemplate(transactionManager).execute(status -> {
+			ReceiptImageService.UploadReceiptImageResult result = upload(fixture);
+			Path file = storedFiles(result.receiptId()).get(0);
+			assertThat(file).exists();
 			assertThat(receiptRepository.findById(result.receiptId())).isPresent();
 			status.setRollbackOnly();
-			return result;
+			return file;
 		});
-		assertThat(uploaded).isNotNull();
-		assertThat(receiptRepository.findById(uploaded.receiptId())).isEmpty();
-		assertThat(storageRoot.resolve(uploaded.storedPath())).doesNotExist();
+		assertThat(stored).isNotNull().doesNotExist();
+		assertThat(receiptRepository.findAllByRoomId(fixture.roomId())).isEmpty();
 	}
 
-	private ReceiptService.UploadReceiptImageResult upload(Fixture fixture) {
-		return receiptService.uploadReceiptImage(fixture.roomId(), fixture.ownerId(),
-			new MockMultipartFile("file", "receipt.png", "image/png", new byte[] {1, 2, 3}), "Receipt");
+	private ReceiptImageService.UploadReceiptImageResult upload(Fixture fixture) {
+		return receiptImageService.createReceiptWithImage(fixture.roomId(), fixture.ownerId(), image(), "Receipt");
+	}
+
+	private MockMultipartFile image() {
+		return new MockMultipartFile("file", "receipt.png", "image/png",
+			new byte[] {(byte) 0x89, 'P', 'N', 'G', 0x0D, 0x0A, 0x1A, 0x0A, 1, 2, 3});
+	}
+
+	private List<Path> storedFiles(Long receiptId) {
+		return receiptImageRepository.findAllByReceiptId(receiptId).stream()
+			.map(image -> storageRoot.resolve(image.getStoredPath()))
+			.toList();
 	}
 
 	private Fixture fixture() {
