@@ -109,15 +109,16 @@ public class SettlementService {
             Long receiptId = receipt.getId();
             List<Item> receiptItems = itemsByReceipt.getOrDefault(receiptId, List.of());
             if (receiptItems.isEmpty()) {
-                issues.add(new SettlementIssue("EMPTY_RECEIPT", receiptId, null, "영수증에 품목을 입력해 주세요."));
+                issues.add(new SettlementIssue("EMPTY_RECEIPT", receiptId, receipt.getName(), null, "영수증에 품목을 입력해 주세요."));
             }
             Long declaredTotal = receipt.getDeclaredTotal();
             boolean appliedOcr=receipt.getSourceType()==com.capstone.itemsplit.receipt.ReceiptSourceType.IMAGE_UPLOAD
                 && ocrDraftRepository.existsByReceiptIdAndStatus(receiptId,"APPLIED");
-            if (!appliedOcr && declaredTotal == null) {
-                issues.add(new SettlementIssue("MISSING_DECLARED_TOTAL", receiptId, null, "영수증 총액을 입력·확정해 주세요."));
+            if (!appliedOcr && declaredTotal == null
+                && receipt.getSourceType() != com.capstone.itemsplit.receipt.ReceiptSourceType.MANUAL) {
+                issues.add(new SettlementIssue("MISSING_DECLARED_TOTAL", receiptId, receipt.getName(), null, "영수증 총액을 입력·확정해 주세요."));
             } else if (!appliedOcr && declaredTotal != null && (declaredTotal < 1 || declaredTotal > MoneyPolicy.RECEIPT_MAX)) {
-                issues.add(new SettlementIssue("INVALID_DECLARED_TOTAL", receiptId, null, "영수증 총액은 1원부터 1,000만 원까지 입력할 수 있습니다."));
+                issues.add(new SettlementIssue("INVALID_DECLARED_TOTAL", receiptId, receipt.getName(), null, "영수증 총액은 1원부터 1,000만 원까지 입력할 수 있습니다."));
             }
             long receiptTotal = 0;
             boolean validAmounts = true;
@@ -129,19 +130,19 @@ public class SettlementService {
                 if (price < 1 || price > MoneyPolicy.PRICE_MAX || quantity < 1 || quantity > MoneyPolicy.QUANTITY_MAX
                     || price > MoneyPolicy.RECEIPT_MAX / quantity) {
                     validAmounts = false;
-                    issues.add(new SettlementIssue("INVALID_ITEM_AMOUNT", receiptId, item.getId(), "품목 단가·수량·금액의 허용 범위를 확인해 주세요."));
+                    issues.add(new SettlementIssue("INVALID_ITEM_AMOUNT", receiptId, receipt.getName(), item.getId(), "품목 단가·수량·금액의 허용 범위를 확인해 주세요."));
                 } else {
                     long itemTotal = price * quantity;
                     if (!receiptLimitReported && receiptTotal > MoneyPolicy.RECEIPT_MAX - itemTotal) {
                         receiptLimitReported = true;
-                        issues.add(new SettlementIssue("RECEIPT_TOTAL_LIMIT", receiptId, null, "제외 품목을 포함한 영수증 품목 합계가 1,000만 원을 초과합니다."));
+                        issues.add(new SettlementIssue("RECEIPT_TOTAL_LIMIT", receiptId, receipt.getName(), null, "제외 품목을 포함한 영수증 품목 합계가 1,000만 원을 초과합니다."));
                     }
                     if (!receiptLimitReported) {
                         receiptTotal += itemTotal;
                     }
                     if (!roomLimitReported && roomTotal > MoneyPolicy.ROOM_MAX - itemTotal) {
                         roomLimitReported = true;
-                        issues.add(new SettlementIssue("ROOM_TOTAL_LIMIT", receiptId, null, "제외 품목을 포함한 방 전체 품목 합계가 1억 원을 초과합니다."));
+                        issues.add(new SettlementIssue("ROOM_TOTAL_LIMIT", receiptId, receipt.getName(), null, "제외 품목을 포함한 방 전체 품목 합계가 1억 원을 초과합니다."));
                     }
                     if (!roomLimitReported) {
                         roomTotal += itemTotal;
@@ -150,28 +151,28 @@ public class SettlementService {
                 List<Assignment> itemAssignments = assignmentsByItem.getOrDefault(item.getId(), List.of());
                 if (item.isExcludedFromSettlement()) {
                     if (!itemAssignments.isEmpty()) {
-                        issues.add(new SettlementIssue("INVALID_ASSIGNEES", receiptId, item.getId(), "정산 제외 품목의 참여자 배정을 해제해 주세요."));
+                        issues.add(new SettlementIssue("INVALID_ASSIGNEES", receiptId, receipt.getName(), item.getId(), "정산 제외 품목의 참여자 배정을 해제해 주세요."));
                     }
                     continue;
                 }
                 included = true;
                 if (itemAssignments.isEmpty()) {
-                    issues.add(new SettlementIssue("MISSING_ASSIGNEES", receiptId, item.getId(), "정산 대상 품목의 참여자를 지정해 주세요."));
+                    issues.add(new SettlementIssue("MISSING_ASSIGNEES", receiptId, receipt.getName(), item.getId(), "정산 대상 품목의 참여자를 지정해 주세요."));
                 } else if (itemAssignments.stream().anyMatch(a -> !memberIds.contains(a.getRoomMember().getId()))
                     || itemAssignments.stream().map(a -> a.getRoomMember().getId()).distinct().count() != itemAssignments.size()) {
-                    issues.add(new SettlementIssue("INVALID_ASSIGNEES", receiptId, item.getId(), "참여자는 해당 방의 멤버로 중복 없이 지정해 주세요."));
+                    issues.add(new SettlementIssue("INVALID_ASSIGNEES", receiptId, receipt.getName(), item.getId(), "참여자는 해당 방의 멤버로 중복 없이 지정해 주세요."));
                 }
             }
             if (included) {
                 if (receipt.getPayer() == null) {
-                    issues.add(new SettlementIssue("MISSING_PAYER", receiptId, null, "정산 대상 영수증의 결제자를 지정해 주세요."));
+                    issues.add(new SettlementIssue("MISSING_PAYER", receiptId, receipt.getName(), null, "정산 대상 영수증의 결제자를 지정해 주세요."));
                 } else if (!memberIds.contains(receipt.getPayer().getId())) {
-                    issues.add(new SettlementIssue("INVALID_PAYER", receiptId, null, "결제자를 해당 방의 멤버로 지정해 주세요."));
+                    issues.add(new SettlementIssue("INVALID_PAYER", receiptId, receipt.getName(), null, "결제자를 해당 방의 멤버로 지정해 주세요."));
                 }
             }
             if (!appliedOcr && validAmounts && !receiptLimitReported && declaredTotal != null
                 && declaredTotal >= 1 && declaredTotal <= MoneyPolicy.RECEIPT_MAX && declaredTotal != receiptTotal) {
-                issues.add(new SettlementIssue("TOTAL_MISMATCH", receiptId, null,
+                issues.add(new SettlementIssue("TOTAL_MISMATCH", receiptId, receipt.getName(), null,
                     "영수증 총액과 전체 품목 합계가 " + Math.abs(declaredTotal - receiptTotal) + "원 다릅니다. 제외 품목도 합계에 포함됩니다."));
             }
         }
@@ -181,7 +182,7 @@ public class SettlementService {
     public record SettlementResult(Long roomId, String roomName, List<MemberSettlement> members,
         boolean ready, List<SettlementIssue> issues) { }
 
-    public record SettlementIssue(String code, Long receiptId, Long itemId, String message) { }
+    public record SettlementIssue(String code, Long receiptId, String receiptName, Long itemId, String message) { }
 
     public record MemberSettlement(Long memberId, Long userId, String nickname, boolean linked,
         long burden, long paid, long net) { }

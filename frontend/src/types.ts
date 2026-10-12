@@ -116,7 +116,7 @@ export type Settlement = {
   roomName: string;
   members: SettlementMember[];
   ready: boolean;
-  issues: Array<{ code: string; receiptId: number; itemId: number | null; message: string }>;
+  issues: Array<{ code: string; receiptId: number; receiptName?: string; itemId: number | null; message: string }>;
 };
 
 export type SharedSettlement = Omit<Settlement, 'ready' | 'issues'> & {

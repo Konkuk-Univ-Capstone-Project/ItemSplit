@@ -1009,7 +1009,7 @@ export function ReceiptsView({
                   <strong>{receipt.name}</strong>
                   <small>{formatDate(receipt.purchasedAt ?? receipt.createdAt)}</small>
                 </span>
-                <b>{receipt.declaredTotal === null ? '미확정' : formatMoney(receipt.declaredTotal)}</b>
+                <b>{receipt.declaredTotal === null ? (receipt.sourceType === 'MANUAL' ? '품목 합계 자동 적용' : '미확정') : formatMoney(receipt.declaredTotal)}</b>
               </button>
               <button
                 className="icon-action danger"
@@ -1213,7 +1213,7 @@ export function ManualReceiptPanel({
             </select>
           </Field>
           <Field label="원본 총액 (미입력 가능)">
-            <input value={declaredTotal} onChange={event => setDeclaredTotal(event.target.value)} inputMode="numeric" placeholder="미확정" />
+            <input value={declaredTotal} onChange={event => setDeclaredTotal(event.target.value)} inputMode="numeric" placeholder={editReceipt?.sourceType === 'IMAGE_UPLOAD' ? '미확정' : '미입력 시 품목 합계 자동 적용'} />
           </Field>
         </div>
         <div className="total-confirmation">
@@ -1223,7 +1223,8 @@ export function ManualReceiptPanel({
               onClick={() => { if (itemTotal !== null) setDeclaredTotal(String(itemTotal)); }}>품목 합계로 총액 확인</button>
           )}
           {editReceipt?.sourceType === 'IMAGE_UPLOAD' && <small>이미지에 적힌 원본 총액을 직접 입력해주세요.</small>}
-          <small>제외 품목도 합계에 포함됩니다. 원본 총액은 품목을 수정해도 바뀌지 않습니다.</small>
+          <small>제외 품목도 합계에 포함됩니다. 직접 입력한 총액은 품목을 수정해도 바뀌지 않습니다.</small>
+          {(!editReceipt || editReceipt.sourceType === 'MANUAL') && !declaredTotal && <small>총액을 입력하지 않으면 현재 품목 합계를 정산 총액으로 자동 확정합니다.</small>}
           {declaredTotal && itemTotal !== null && Number(declaredTotal) !== itemTotal && <span className="warning-badge">원본 총액과 품목 합계가 다릅니다. 초안 저장 후 수정할 수 있습니다.</span>}
         </div>
         <div className="field manual-assignee-field">
@@ -1531,7 +1532,7 @@ export function SettlementBoard({ settlement, compact = false }: { settlement: S
         <ul className="settlement-issues">
           {settlement.issues.map((issue, index) => (
             <li key={`${issue.code}-${issue.receiptId}-${issue.itemId}-${index}`}>
-              <strong>영수증 #{issue.receiptId}{issue.itemId !== null ? ` · 품목 #${issue.itemId}` : ''}</strong>
+              <strong>{issue.receiptName || `영수증 #${issue.receiptId}`}{issue.itemId !== null ? ` · 품목 #${issue.itemId}` : ''}</strong>
               <span>{issue.message}</span>
             </li>
           ))}
