@@ -201,6 +201,11 @@ export function getReceiptOcr(token: string, roomId: number, receiptId: number, 
   return request<ReceiptOcrJob>(`/api/rooms/${roomId}/receipts/${receiptId}/ocr/jobs/${jobId}`, { token, signal });
 }
 
+export function retryReceiptOcrImage(token: string, roomId: number, receiptId: number, jobId: number, imageId: number) {
+  return request<ReceiptOcrJob>(`/api/rooms/${roomId}/receipts/${receiptId}/ocr/jobs/${jobId}/images/${imageId}/retry`, {
+    token, method: 'POST'
+  });
+}
 
 export function createManualReceipt(
   token: string,

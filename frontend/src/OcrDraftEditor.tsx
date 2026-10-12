@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react';
-import { applyReceiptOcrDraft, getReceiptOcr, saveReceiptOcrDraft } from './api';
+import { applyReceiptOcrDraft, getReceiptOcr, retryReceiptOcrImage, saveReceiptOcrDraft } from './api';
+import { imageRetryAvailable } from './ocrReview';
 import type { OcrDraftWrite, ReceiptOcrJob, RoomMember } from './types';
 
 const messages: Record<string, string> = {
@@ -13,10 +14,11 @@ const errors: Record<string, string> = {
   QUANTITY_OUT_OF_RANGE: '수량 1~999', LINE_AMOUNT_OUT_OF_RANGE: '품목 금액 범위 확인'
 };
 
-export function OcrDraftEditor({ token, roomId, job, members, onSaved, onApplied, onSelectSource }: {
+export function OcrDraftEditor({ token, roomId, job, members, onSaved, onApplied, onSelectSource, canRetry = false }: {
   token: string; roomId: number; job: ReceiptOcrJob; members: RoomMember[];
   onSelectSource?: (item: ReceiptOcrJob['draft']['items'][number]) => void;
   onSaved: (job: ReceiptOcrJob) => void; onApplied: () => Promise<void>;
+  canRetry?: boolean;
 }) {
   const [lines, setLines] = useState<OcrDraftWrite['items']>(() => job.draft.items.map(line => ({
     draftItemId: line.draftItemId, name: line.name, price: line.price, quantity: line.quantity,
@@ -49,11 +51,19 @@ export function OcrDraftEditor({ token, roomId, job, members, onSaved, onApplied
     } catch (e) { setError(e instanceof Error ? e.message : '저장하지 못했습니다.'); }
     finally { inFlight.current = false; setBusy(false); }
   }
+  async function retry(imageId: number) {
+    if (inFlight.current || !imageRetryAvailable(job, imageId, canRetry, dirty)) return;
+    inFlight.current = true; setBusy(true); setError(''); setConfirmed(false);
+    try { onSaved(await retryReceiptOcrImage(token, roomId, job.receiptId, job.jobId, imageId)); }
+    catch (e) { setError(e instanceof Error ? e.message : '다시 인식하지 못했습니다.'); }
+    finally { inFlight.current = false; setBusy(false); }
+  }
   return <div className="ocr-review">
     <h4>정산 품목 검토</h4>
     <p>품목과 금액을 수정하고 함께 부담할 참여자를 선택하세요. 삭제 표시는 반영할 품목에서 빼고, 정산 제외는 품목을 남긴 채 부담 계산에서 뺍니다.</p>
     <fieldset className="receipt-fieldset" disabled={busy}>
-      {lines.map((line, index) => <div className="ocr-edit-row" key={line.draftItemId ?? `new-${index}`}>
+      {lines.map((line, index) => {
+        return <div className="ocr-edit-row" key={line.draftItemId ?? `new-${index}`}>
         {onSelectSource && job.draft.items.find(item => item.draftItemId === line.draftItemId)?.imageId != null &&
           <button type="button" className="source-photo-link" onClick={() => {
             const original = job.draft.items.find(item => item.draftItemId === line.draftItemId);
@@ -82,17 +92,26 @@ export function OcrDraftEditor({ token, roomId, job, members, onSaved, onApplied
             {line.memberIds.length === 0 && <small>참여자를 지정해야 정산이 완료됩니다.</small>}
           </div>}
         </fieldset>
-      </div>)}
+      </div>; })}
       <button className="button secondary" type="button" onClick={() => {
         setLines(rows => [...rows, { draftItemId: null, name: '', price: null, quantity: 1, memberIds: [], excludedFromSettlement: false, removed: false }]);
         setDirty(true); setConfirmed(false);
       }}>누락 품목 추가</button>
-      {job.images.filter(i => i.status === 'FAILED').map(image => <label className="checkbox-label" key={image.imageId}>
+      {job.images.filter(i => i.status === 'FAILED').map(image => <div key={image.imageId}>
+        {canRetry && <div>
+          <p>실패한 사진 #{image.imageId} · {image.attemptCount >= 3 ? '사진별 최대 3회를 모두 사용했습니다.' : `남은 재시도 ${3 - image.attemptCount}회`}</p>
+          <button className="button secondary" type="button" disabled={!imageRetryAvailable(job, image.imageId, canRetry, dirty)}
+            onClick={() => void retry(image.imageId)}>다시 인식</button>
+          {dirty && <p>변경한 검토 내용을 저장한 뒤 다시 인식할 수 있습니다.</p>}
+          {(!image.retryable || image.attemptCount >= 3) && <p>이 사진은 다시 인식할 수 없습니다. 품목을 수동으로 보완해주세요.</p>}
+          {covered.includes(image.imageId) && <p>수동 입력한 품목은 유지됩니다. 다시 인식한 뒤 중복 품목을 확인해주세요.</p>}
+        </div>}
+        <label className="checkbox-label">
         <input type="checkbox" checked={covered.includes(image.imageId)} onChange={e => {
           setCovered(ids => e.target.checked ? [...ids, image.imageId] : ids.filter(id => id !== image.imageId));
           setDirty(true); setConfirmed(false);
         }} />실패한 사진 #{image.imageId}의 품목을 모두 수동 입력했습니다.
-      </label>)}
+      </label></div>)}
       <button className="button secondary" type="button" disabled={!dirty} onClick={() => void action(false)}>
         {busy ? '처리 중…' : '검토 내용 저장'}
       </button>

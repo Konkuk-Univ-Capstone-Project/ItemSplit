@@ -356,3 +356,62 @@ test('network failure while reading an HTTP 200 body remains retryable', async t
 });
 
 import './ocrPolling.test';
+
+
+function reviewJob() {
+  return { jobId: 1, receiptId: 7, requestedByUserId: 1, status: 'PARTIALLY_FAILED', provider: 'CLOVA_RECEIPT',
+    images: [{ imageId: 41, status: 'FAILED', errorCode: 'PROVIDER_TIMEOUT', manuallyCovered: false,
+      retryable: true, attemptCount: 1, candidates: null }],
+    draft: { status: 'EDITING', revision: 2, itemsTotal: 0, warnings: [], blockers: ['IMAGE_FAILED_UNCOVERED'], items: [
+      { draftItemId: 1, imageId: 40, name: 'Soup', price: null, quantity: 2, memberIds: [12],
+        excludedFromSettlement: false, removed: false,
+        ocr: { unitPrice: null, lineAmount: 16000, derivedUnitPrice: 8000 }, issues: ['MISSING_PRICE'], warnings: [] }
+    ] } };
+}
+
+
+test('failed image retry only posts to that image and preserves structured quota reasons', async (t) => {
+  const api = await import('../src/api');
+  assert.equal(typeof api.retryReceiptOcrImage, 'function');
+  let sent;
+  t.mock.method(globalThis, 'fetch', async (url, options) => {
+    sent = { url, method: options.method };
+    return new Response(JSON.stringify({ success: false, data: null, error: {
+      code: 'TOO_MANY_REQUESTS', message: '오늘 한도 초과',
+      details: [{ field: 'ocr', reason: 'OCR_USER_DAILY_LIMIT', rejectedValue: null }]
+    } }), { status: 429 });
+  });
+  await assert.rejects(api.retryReceiptOcrImage('token', 1, 7, 2, 41), error => {
+    assert.equal(error.reason, 'OCR_USER_DAILY_LIMIT');
+    assert.equal(error.status, 429);
+    return true;
+  });
+  assert.deepEqual(sent, { url: '/api/rooms/1/receipts/7/ocr/jobs/2/images/41/retry', method: 'POST' });
+});
+
+
+test('retry control exposes remaining attempts and cannot retry exhausted photos', () => {
+  const job = reviewJob();
+  const render = () => renderToStaticMarkup(<OcrDraftEditor token="token" roomId={1} job={job}
+    members={[]} canRetry={true} onSaved={() => {}} onApplied={async () => {}} />);
+  assert.match(render(), /다시 인식/);
+  assert.match(render(), /남은 재시도 2회/);
+  job.images[0].attemptCount = 3;
+  assert.match(render(), /disabled=""[^>]*>다시 인식/);
+  assert.match(render(), /3회.*사용/);
+});
+
+
+test('retry eligibility protects unsaved edits, other viewers, completed drafts and successful images', async () => {
+  const { imageRetryAvailable } = await import('../src/ocrReview');
+  const job = reviewJob();
+  assert.equal(imageRetryAvailable(job,41,true,false),true);
+  assert.equal(imageRetryAvailable(job,41,true,true),false);
+  assert.equal(imageRetryAvailable(job,41,false,false),false);
+  assert.equal(imageRetryAvailable({...job,status:'PROCESSING'},41,true,false),false);
+  assert.equal(imageRetryAvailable({...job,draft:{...job.draft,status:'APPLIED'}},41,true,false),false);
+  job.images[0].retryable=false;
+  assert.equal(imageRetryAvailable(job,41,true,false),false);
+  job.images[0].retryable=true;job.images[0].status='SUCCEEDED';
+  assert.equal(imageRetryAvailable(job,41,true,false),false);
+});

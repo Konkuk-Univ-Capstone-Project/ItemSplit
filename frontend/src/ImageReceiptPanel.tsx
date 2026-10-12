@@ -154,7 +154,7 @@ export function ReceiptOcrPanel({ token, roomId, receiptId, name, members, curre
       </> :
         !['PENDING', 'PROCESSING'].includes(job.status) && (currentUserId === job.requestedByUserId ?
           <OcrDraftEditor key={`${job.jobId}-${job.draft.revision}-${reload}`} token={token} roomId={roomId} job={job}
-            members={members} onSaved={handleSaved} onApplied={onApplied} onSelectSource={selectSource} /> :
+            members={members} canRetry={true} onSaved={handleSaved} onApplied={onApplied} onSelectSource={selectSource} /> :
           <p>영수증을 올린 사용자만 초안을 검토하고 정산에 반영할 수 있습니다.</p>)}
     </>}
     </div></div>
