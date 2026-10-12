@@ -1,10 +1,12 @@
 # 실제 저장소·가짜 CLOVA를 사용하는 OCR 백엔드
 
+이 문서는 합성 응답으로 검증하는 `ocr-demo` 실행 안내다. 실제 공급자 연동은 [CLOVA 백엔드 실행 안내](clova-backend.md)를 따른다.
+
 ## 이번 구현 범위
 
 `이미지 업로드 → StorageService(local/S3) 저장·읽기 → 가짜 CLOVA JSON → 실제 파싱 → DB 초안 저장·조회`를 실행한다. PR 23의 저장소 구현체를 사용하며 CLOVA에는 접속하지 않는다. `STORAGE_TYPE=local`이면 AWS 계정 없이 실행할 수 있다. `s3`이면 실제 S3에 이미지 객체를 저장하고 읽는다. 사용자 확인 전 정상 `items`에는 저장하지 않는다.
 
-기존 최종 설계 중 **인식 시작·조회·실패 재시도와 초안 생성**을 구현한 단계다. 실제 CLOVA HTTP 호출, 초안 편집·정상 품목 반영, UI, 수정 요청·품목 이동, 정산 정책 전환은 포함하지 않는다. 기존 `declaredTotal` 정산 규칙은 이 변경으로 바뀌지 않는다. 비용 기반 일일 한도·전용 polling 제한·사진 경계 중복 판정도 실제 서비스 연결 전 별도 구현 대상이다. 현재는 이미지별 최대 3번 시도 및 기존 API 요청 제한을 적용한다.
+기존 최종 설계 중 **인식 시작·조회·실패 재시도와 초안 생성**을 구현한 단계다. 실제 CLOVA HTTP 호출은 별도 `ocr` 프로필로 지원한다. 웹에서는 사진 업로드·인식 시작·초안 검토·수정·정산 반영까지 지원한다. [저장·반영 API 계약](clova-backend.md#초안-저장반영-계약)을 참고한다. 반영된 OCR 영수증은 품목 합계로 정산하고 수기 영수증은 총액 미입력 시 현재 품목 합계를 사용한다. 직접 입력한 총액은 기존 불일치 검증을 유지한다. 수정 요청·품목 이동은 별도 구현 대상이다. 비용 기반 일일 한도·전용 polling 제한·사진 경계 중복 판정은 별도 구현 대상이다. 현재는 이미지별 최대 3번 시도 및 기존 API 요청 제한을 적용한다.
 
 ## 실행
 
@@ -69,7 +71,7 @@ curl http://localhost:8080/api/rooms/ROOM_ID/receipts/RECEIPT_ID/ocr/jobs/latest
 
 상태는 `PENDING → PROCESSING → REVIEWABLE / PARTIALLY_FAILED / FAILED`. 응답은 `jobId`, `receiptId`, `status`, `provider`, 사진별 상태·오류·시도 횟수·후보, `draft`를 제공한다. `FAKE_CLOVA_RECEIPT` 표기로 합성 결과임을 구분한다. 초안은 `EDITING`, 품목마다 원문·변환값·검토 사유를 제공한다. 단가 계산 후보는 `ocr.derivedUnitPrice`에만 표시하며 누락 단가를 자동 채우지 않는다. `itemsTotal`이 JS 안전 정수 범위를 넘으면 `null`과 합계 상한 차단 사유를 반환한다.
 
-이 단계에는 반영 API가 없으므로 `applicable` 필드도 제공하지 않는다. 초안의 `blockers`는 현재 인식 결과의 검토 사유이며 기존 정산 결과의 `issues`와 별개다. 총액 불일치는 초안의 `OCR_TOTAL_MISMATCH` 경고다.
+`applicable` 대신 초안 `status`와 `blockers`를 확인한다. `EDITING` 상태이고 `blockers`가 비어 있을 때 저장된 revision에 대한 최종 검토 확인 후 반영을 요청할 수 있다. 초안의 `blockers`는 기존 정산 결과의 `issues`와 별개다. 총액 불일치는 초안의 `OCR_TOTAL_MISMATCH` 경고다.
 
 ### 4. 실패 사진 재시도
 
@@ -116,9 +118,9 @@ STORAGE_TYPE=s3 S3_BUCKET=your-dev-bucket AWS_REGION=ap-northeast-2 \
 
 ### CLOVA 담당
 
-`ocr.engine.ClovaTransport`의 `String recognize(OcrImageInput)`을 실제 HTTP 요청으로 구현한다. `ClovaReceiptOcrEngine(realTransport, ClovaReceiptParser)`를 `ReceiptOcrEngine` Bean으로 등록하면 공통 파서·상태 관리·DB 저장을 재사용한다. 실제 CLOVA를 연결할 때는 `ocr-demo` 프로필과 가짜 공급자를 끈다. HTTP timeout/429/auth 오류는 `OcrEngineException`으로 변환하고 API 키·전체 응답을 로그에 남기지 않는다. 공급자 호출 동안 DB 트랜잭션은 열려 있지 않다.
+`HttpClovaTransport`가 `ClovaTransport`를 구현하고 `OcrConfiguration`이 실제 엔진을 등록한다. 공통 파서·상태 관리·DB 저장을 재사용하며 HTTP timeout/429/auth 오류는 `OcrEngineException`으로 변환한다. 공급자 호출 동안 DB 트랜잭션은 열려 있지 않다.
 
-`app.ocr.provider=clova`라는 설정만으로 실제 호출이 생기지는 않는다. 실제 Bean 등록과 URL/Secret 설정 검증이 필요하다. 실제 연결 시 `ocr-demo`를 끄고 `app.ocr.enabled=true` 및 실제 구현체 설정을 사용한다. 테스트용 합성 영수증은 실제 이미지로 오인하지 않도록 새 실제 업로드 데이터로 검증한다.
+실제 연결 시 `ocr-demo`를 끄고 `ocr` 프로필을 사용한다. URL/Secret은 시작 시 검증한다. 데모 API로 생성한 영수증과 이전 가짜 OCR 결과를 실제 인식 결과로 사용하지 말고, 새 영수증 이미지를 업로드해 검증한다.
 
 ## 검증
 

@@ -107,7 +107,7 @@ Windows
 gradlew.bat bootRun
 ```
 
-기본 프로파일은 `local`입니다. Compose는 `.env`를 읽지만, `bootRun`은 셸 환경 변수 또는 기본 DB 접속값을 사용합니다. `.env`의 DB 설정을 변경했다면 같은 `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`를 실행 환경에도 설정합니다.
+기본 프로파일은 `local`입니다. Compose는 `.env`를 읽지만, 기본 `bootRun`은 셸 환경 변수 또는 기본 DB 접속값을 사용합니다. `.env`의 DB 설정을 변경했다면 같은 `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`를 실행 환경에도 설정합니다. 실제 CLOVA OCR은 `local,ocr` 프로필로 실행하며 이 프로필에서는 루트 `.env`도 읽습니다. 키 설정과 실행 명령은 [CLOVA OCR 실행 안내](docs/ocr/clova-backend.md)를 참고합니다.
 
 ### 4. 프론트엔드 실행
 
