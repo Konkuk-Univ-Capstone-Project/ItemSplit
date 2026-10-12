@@ -31,6 +31,7 @@ class SettlementLegacyAmountTest {
     @Mock ReceiptRepository receipts;
     @Mock ItemRepository items;
     @Mock AssignmentRepository assignments;
+    @Mock com.capstone.itemsplit.ocr.OcrDraftRepository ocrDrafts;
     @InjectMocks SettlementService service;
     Room room;
     RoomMember member;
@@ -70,6 +71,29 @@ class SettlementLegacyAmountTest {
         when(items.findAllByReceiptIdIn(any())).thenReturn(List.of(item));
         when(assignments.findAllByItemIdInWithUser(any())).thenReturn(List.of(Assignment.create(item, member)));
         assertThat(service.calculate(1L, 1L).members()).isEmpty();
+    }
+
+    @Test
+    void manualReceiptWithoutDeclaredTotalSettlesUsingCurrentItemSum() {
+        Receipt receipt = Receipt.createManual(room, "팀회식", member, null, null);
+        ReflectionTestUtils.setField(receipt, "id", 3L);
+        Item pasta = Item.create(receipt, "파스타", 15000, 1);
+        Item pizza = Item.create(receipt, "피자", 22000, 1);
+        ReflectionTestUtils.setField(pasta, "id", 4L);
+        ReflectionTestUtils.setField(pizza, "id", 5L);
+        when(receipts.findAllByRoomId(1L)).thenReturn(List.of(receipt));
+        when(items.findAllByReceiptIdIn(any())).thenReturn(List.of(pasta, pizza));
+        when(assignments.findAllByItemIdInWithUser(any())).thenReturn(List.of(
+            Assignment.create(pasta, member), Assignment.create(pizza, member)));
+        var result = service.calculate(1L, 1L);
+        assertThat(result.ready()).isTrue();
+        assertThat(result.members().getFirst().paid()).isEqualTo(37000);
+        assertThat(result.members().getFirst().burden()).isEqualTo(37000);
+        pizza.update("피자", 22000, 2);
+        assertThat(service.calculate(1L, 1L).members().getFirst().paid()).isEqualTo(59000);
+        receipt.update("팀회식", member, 37000L, null);
+        assertThat(service.calculate(1L, 1L).issues()).extracting(SettlementService.SettlementIssue::code)
+            .contains("TOTAL_MISMATCH");
     }
 
     @Test

@@ -1,9 +1,44 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { addItem, updateItem } from '../src/api';
+import { addItem, updateItem, uploadReceiptImage, startReceiptOcr, getLatestReceiptOcr, getReceiptOcr, saveReceiptOcrDraft, applyReceiptOcrDraft } from '../src/api';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { SettlementBoard, ManualReceiptPanel } from '../src/App';
+import { SettlementBoard, ManualReceiptPanel, ReceiptsView } from '../src/App';
+import { OcrDraftEditor } from '../src/OcrDraftEditor';
+import { ReceiptOcrResult } from '../src/ImageReceiptPanel';
 import { receiptItemsToDraftItems, normalizeReceiptDraft, getCreateAttempt, applyParticipants, setItemExcluded, calculateDraftTotal } from '../src/receiptDraft';
+
+test('image upload sends the actual file as multipart without a JSON content type', async (t) => {
+  let sent;
+  t.mock.method(globalThis, 'fetch', async (url, options) => {
+    sent = { url, options };
+    return new Response(JSON.stringify({ success: true, data: { receiptId: 27 } }), { status: 201 });
+  });
+  const file = new File(['image-content'], 'receipt.png', { type: 'image/png' });
+  const result = await uploadReceiptImage('token', 8, file, '사진 영수증');
+  assert.equal(result.receiptId, 27);
+  assert.equal(sent.url, '/api/rooms/8/receipts/image');
+  assert.equal(sent.options.method, 'POST');
+  assert.equal(sent.options.headers.get('Authorization'), 'Bearer token');
+  assert.equal(sent.options.headers.has('Content-Type'), false);
+  assert.equal(await sent.options.body.get('file').text(), 'image-content');
+  assert.equal(sent.options.body.get('name'), '사진 영수증');
+});
+
+test('OCR start reuses its request ID and status reads never POST another job', async (t) => {
+  const calls = [];
+  t.mock.method(globalThis, 'fetch', async (url, options) => {
+    calls.push({ url, method: options.method ?? 'GET', body: options.body });
+    return new Response(JSON.stringify({ success: true, data: null }), { status: 200 });
+  });
+  await startReceiptOcr('token', 8, 27, 'stable-request');
+  assert.equal(await getLatestReceiptOcr('token', 8, 27), null);
+  await getReceiptOcr('token', 8, 27, 6);
+  assert.deepEqual(calls, [
+    { url: '/api/rooms/8/receipts/27/ocr/jobs', method: 'POST', body: '{"requestId":"stable-request"}' },
+    { url: '/api/rooms/8/receipts/27/ocr/jobs/latest', method: 'GET', body: undefined },
+    { url: '/api/rooms/8/receipts/27/ocr/jobs/6', method: 'GET', body: undefined }
+  ]);
+});
 
 const receipt = {
   receiptId: 7, roomId: 1, name: 'Dinner', sourceType: 'MANUAL', payerMemberId: 12,
@@ -15,6 +50,79 @@ const receipt = {
   ]
 };
 
+test('switching receipt selection hides the previous image OCR panel until details match', () => {
+  const html = renderToStaticMarkup(<ReceiptsView token="token" roomId={1} members={[]}
+    receipts={[]} selectedReceiptId={8} setSelectedReceiptId={() => {}}
+    selectedReceipt={{ ...receipt, sourceType: 'IMAGE_UPLOAD', name: 'Previous photo' }}
+    assignees={{}} setAssignees={() => {}} refreshRoom={async () => {}}
+    refreshReceipt={async () => {}} setNotice={() => {}} />);
+  assert.doesNotMatch(html, /Previous photo/);
+  assert.match(html, /선택한 영수증을 불러오는 중/);
+});
+
+test('image receipt list shows an unconfirmed total instead of zero', () => {
+  const photo = { ...receipt, sourceType: 'IMAGE_UPLOAD', declaredTotal: null };
+  const html = renderToStaticMarkup(<ReceiptsView token="token" roomId={1} members={[]}
+    receipts={[photo]} selectedReceiptId={7} setSelectedReceiptId={() => {}}
+    selectedReceipt={photo} assignees={{}} setAssignees={() => {}}
+    refreshRoom={async () => {}} refreshReceipt={async () => {}} setNotice={() => {}} />);
+  assert.match(html, /미확정/);
+  assert.doesNotMatch(html, />0원</);
+});
+
+test('an existing image receipt offers manual item entry in its own detail panel', () => {
+  const photo = { ...receipt, sourceType: 'IMAGE_UPLOAD' };
+  const html = renderToStaticMarkup(<ReceiptsView token="token" roomId={1} members={[]}
+    receipts={[photo]} selectedReceiptId={7} setSelectedReceiptId={() => {}}
+    selectedReceipt={photo} assignees={{}} setAssignees={() => {}}
+    refreshRoom={async () => {}} refreshReceipt={async () => {}} setNotice={() => {}} />);
+  assert.match(html, /aria-label="수동 품목 추가"/);
+  assert.match(html, /aria-label="추가 품목명"/);
+  assert.match(html, /aria-label="추가 단가"/);
+  assert.match(html, /aria-label="추가 수량"/);
+  assert.doesNotMatch(html, />영수증을 선택하세요\.</);
+});
+
+test('creating a new receipt shows the entry form without an empty detail panel', () => {
+  const html = renderToStaticMarkup(<ReceiptsView token="token" roomId={1} members={[]}
+    receipts={[receipt]} selectedReceiptId={null} setSelectedReceiptId={() => {}}
+    selectedReceipt={receipt} assignees={{}} setAssignees={() => {}}
+    refreshRoom={async () => {}} refreshReceipt={async () => {}} setNotice={() => {}} />);
+  assert.match(html, /aria-label="새 영수증 입력 방식"/);
+  assert.match(html, /aria-pressed="true"[^>]*>영수증 사진 첨부/);
+  assert.match(html, /사진 업로드/);
+  assert.match(html, /class="receipt-entry-pane" hidden=""><form class="panel manual-panel"/);
+  assert.doesNotMatch(html, /detail-panel/);
+  assert.doesNotMatch(html, />영수증을 선택하세요\.</);
+  assert.ok(html.indexOf('receipt-list-panel') < html.indexOf('image-upload-panel'), '목록이 입력 폼보다 먼저 표시되어야 함');
+});
+
+test('selecting an existing image receipt keeps the list above review and hides new receipt upload', () => {
+  const photo = { ...receipt, sourceType: 'IMAGE_UPLOAD' };
+  const html = renderToStaticMarkup(<ReceiptsView token="token" roomId={1} members={[]}
+    receipts={[photo]} selectedReceiptId={7} setSelectedReceiptId={() => {}}
+    selectedReceipt={photo} assignees={{}} setAssignees={() => {}}
+    refreshRoom={async () => {}} refreshReceipt={async () => {}} setNotice={() => {}} />);
+  assert.ok(html.indexOf('receipt-list-panel') < html.indexOf('ocr-panel'));
+  assert.doesNotMatch(html, /image-upload-panel/);
+  assert.doesNotMatch(html, /aria-label="새 영수증 입력 방식"/);
+});
+
+test('OCR results preserve missing values and identify results as uncommitted drafts', () => {
+  const html = renderToStaticMarkup(<ReceiptOcrResult job={{
+    jobId: 1, receiptId: 7, status: 'REVIEWABLE', provider: 'CLOVA_RECEIPT', images: [],
+    draft: { itemsTotal: null, warnings: ['OCR_TOTAL_MISMATCH'], blockers: ['ITEM_ISSUES'], items: [
+      { draftItemId: 1, name: 'Soup', price: null, quantity: null, ocr: { lineAmount: 16000 },
+        issues: ['MISSING_PRICE'], warnings: [] }
+    ] }
+  }} />);
+  assert.match(html, /인식되지 않음/);
+  assert.match(html, /16,000원/);
+  assert.match(html, /정산 품목에는 아직 반영되지 않았습니다/);
+  assert.match(html, /품목 합계와 영수증의 총액이 다릅니다/);
+  assert.doesNotMatch(html, />0원</);
+});
+
 test('opening an existing receipt preserves separate assignments and exclusion', () => {
   const draft = receiptItemsToDraftItems(receipt);
   assert.deepEqual(draft.map(item => item.memberIds), [[12], [15], []]);
@@ -24,9 +132,11 @@ test('opening an existing receipt preserves separate assignments and exclusion',
 test('blocked settlement shows reasons without transfers or an all-clear empty result', () => {
   const html = renderToStaticMarkup(<SettlementBoard settlement={{
     roomId: 1, roomName: 'Room', ready: false, members: [],
-    issues: [{ code: 'TOTAL_MISSING', receiptId: 7, itemId: null, message: '원본 총액을 입력해주세요.' }]
+    issues: [{ code: 'TOTAL_MISSING', receiptId: 7, receiptName: '팀회식', itemId: null, message: '원본 총액을 입력해주세요.' }]
   }} />);
   assert.match(html, /원본 총액을 입력해주세요/);
+  assert.match(html, /팀회식/);
+  assert.doesNotMatch(html, /영수증 #7/);
   assert.doesNotMatch(html, /송금할 내역이 없습니다/);
   assert.doesNotMatch(html, /transfer-section/);
 });
@@ -169,4 +279,55 @@ test('legacy item writes send only editable item fields and return the legacy re
   ]);
   assert.deepEqual(added, response);
   assert.deepEqual(updated, response);
+});
+
+
+test('review saves the draft version and apply sends only the reviewed server revision', async (t) => {
+  const calls = [];
+  t.mock.method(globalThis, 'fetch', async (url, options) => {
+    calls.push({ url, method: options.method, body: JSON.parse(options.body) });
+    return new Response(JSON.stringify({ success: true, data: {} }), { status: 200 });
+  });
+  const payload = { revision: 2, coveredImageIds: [], items: [] };
+  await saveReceiptOcrDraft('token', 8, 27, 6, payload);
+  await applyReceiptOcrDraft('token', 8, 27, 6, 3);
+  assert.deepEqual(calls, [
+    { url: '/api/rooms/8/receipts/27/ocr/jobs/6/draft', method: 'PUT', body: payload },
+    { url: '/api/rooms/8/receipts/27/ocr/jobs/6/draft/apply', method: 'POST', body: { revision: 3, reviewConfirmed: true } }
+  ]);
+});
+
+
+test('OCR review offers editing and prevents apply until review confirmation', () => {
+  const job = { jobId: 1, receiptId: 7, requestedByUserId: 1, status: 'REVIEWABLE', provider: 'CLOVA_RECEIPT', images: [],
+    draft: { status: 'EDITING', revision: 2, itemsTotal: 18000, warnings: [], blockers: [], items: [
+      { draftItemId: 1, imageId: 1, name: 'Soup', price: 9000, quantity: 2, memberIds: [12],
+        excludedFromSettlement: false, removed: false, ocr: { lineAmount: 18000 }, issues: [], warnings: [] }
+    ] } };
+  const html = renderToStaticMarkup(<OcrDraftEditor token="token" roomId={1} job={job}
+    members={[{ memberId: 12, nickname: 'A' }]} onSaved={() => {}} onApplied={async () => {}} />);
+  assert.match(html, /1번 품목명/);
+  assert.match(html, /1번 품목 참여자/);
+  assert.match(html, /검토했습니다/);
+  assert.match(html, /disabled="">정산에 반영/);
+  const applied = renderToStaticMarkup(<ReceiptOcrResult job={{ ...job, draft: { ...job.draft, status: 'APPLIED' } }} />);
+  assert.doesNotMatch(applied, /정산 품목에는 아직 반영되지 않았습니다/);
+});
+
+test('image list requires member auth and OCR fields retain their source polygons', async (t) => {
+  const { getReceiptImages } = await import('../src/api');
+  const { sourcePolygons } = await import('../src/ReceiptImageViewer');
+  let sent;
+  t.mock.method(globalThis, 'fetch', async (url, options) => {
+    sent = { url, options };
+    return new Response(JSON.stringify({ success: true, data: [{ imageId: 41, order: 1, url: '/signed-photo', expiresAt: '2026-10-12T12:05:00Z', contentType: 'image/png' }] }));
+  });
+  const images = await getReceiptImages('token', 8, 27);
+  assert.equal(sent.url, '/api/rooms/8/receipts/27/images');
+  assert.equal(sent.options.headers.get('Authorization'), 'Bearer token');
+  assert.equal(images[0].imageId, 41);
+  const box = [{ x: 10, y: 20 }, { x: 30, y: 20 }, { x: 30, y: 40 }];
+  assert.deepEqual(sourcePolygons({ name: { box }, quantity: { box: [] } }), [[{ x: 10, y: 20 }, { x: 30, y: 20 }, { x: 30, y: 40 }, { x: 10, y: 40 }]]);
+  assert.deepEqual(sourcePolygons(null), []);
+  assert.deepEqual(sourcePolygons({ name: { box: [{ x: -1, y: 1 }] } }), []);
 });

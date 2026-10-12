@@ -139,7 +139,8 @@ class SettlementControllerTest {
 			.andExpect(status().isOk())
 			.andExpect(jsonPath("$.data.ready").value(false))
 			.andExpect(jsonPath("$.data.members").isEmpty())
-			.andExpect(jsonPath("$.data.issues[*].code", org.hamcrest.Matchers.hasItems("MISSING_DECLARED_TOTAL", "MISSING_PAYER", "MISSING_ASSIGNEES")));
+			.andExpect(jsonPath("$.data.issues[*].code", org.hamcrest.Matchers.containsInAnyOrder("MISSING_PAYER", "MISSING_ASSIGNEES")))
+			.andExpect(jsonPath("$.data.issues[0].receiptName").value("카페"));
 	}
 
 	@Test
@@ -336,8 +337,8 @@ class SettlementControllerTest {
 		mockMvc.perform(get("/api/rooms/{roomId}/settlements", room.getId())
 				.header(HttpHeaders.AUTHORIZATION, bearer(owner)))
 			.andExpect(status().isOk())
-			.andExpect(jsonPath("$.data.ready").value(false))
-			.andExpect(jsonPath("$.data.issues[*].code", org.hamcrest.Matchers.contains("MISSING_DECLARED_TOTAL")));
+			.andExpect(jsonPath("$.data.ready").value(true))
+			.andExpect(jsonPath("$.data.issues").isEmpty());
 	}
 
 	private User createUser(String email, String nickname) {
