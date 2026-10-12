@@ -1,0 +1,22 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: itemsplit-e2e-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: itemsplit
+      POSTGRES_USER: itemsplit
+      POSTGRES_PASSWORD: itemsplit
+    ports:
+      - "127.0.0.1:15432:5432"
+    volumes:
+      - preserved-db:/var/lib/postgresql/data
+    healthcheck:
+      test: [CMD-SHELL, "pg_isready -U itemsplit -d itemsplit"]
+      interval: 2s
+      timeout: 5s
+      retries: 20
+volumes:
+  preserved-db:
+    external: true
+    name: itemsplit-e2e_itemsplit-postgres-data
