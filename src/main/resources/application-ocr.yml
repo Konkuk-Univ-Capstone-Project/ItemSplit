@@ -1,0 +1,16 @@
+# Explicit real-provider profile. .env is local-only and excluded from Git/Docker images.
+spring:
+  config:
+    import: optional:file:.env[.properties]
+
+app:
+  ocr:
+    enabled: true
+    provider: clova
+    image-source: storage
+    demo-enabled: false
+    connect-timeout: ${OCR_CONNECT_TIMEOUT:3s}
+    read-timeout: ${OCR_READ_TIMEOUT:15s}
+    clova:
+      invoke-url: ${CLOVA_OCR_INVOKE_URL:}
+      secret: ${CLOVA_OCR_SECRET:}
