@@ -64,6 +64,43 @@ export type ReceiptDetail = ReceiptSummary & {
   warning: string | null;
 };
 
+export type ReceiptOcrJob = {
+  jobId: number;
+  receiptId: number;
+  status: 'PENDING' | 'PROCESSING' | 'REVIEWABLE' | 'PARTIALLY_FAILED' | 'FAILED';
+  provider: string;
+  requestedByUserId: number;
+  images: Array<{
+    imageId: number;
+    status: string;
+    errorCode: string | null;
+    manuallyCovered: boolean;
+    retryable: boolean;
+    attemptCount: number;
+    candidates: { storeName: string | null; purchasedAt: string | null; totalAmount: number | null } | null;
+  }>;
+  draft: {
+    status: 'EDITING' | 'APPLIED';
+    revision: number;
+    itemsTotal: number | null;
+    warnings: string[];
+    blockers: string[];
+    items: Array<{
+      draftItemId: number;
+      imageId: number | null;
+      memberIds: number[];
+      excludedFromSettlement: boolean;
+      removed: boolean;
+      name: string | null;
+      price: number | null;
+      quantity: number | null;
+      ocr: { lineAmount: number | null; detail?: OcrSourceDetail | null };
+      issues: string[];
+      warnings: string[];
+    }>;
+  };
+};
+
 export type SettlementMember = {
   memberId: number;
   userId: number | null;
@@ -102,3 +139,27 @@ export type AssigneesResult = {
   itemName: string;
   assignees: Assignee[];
 };
+
+export type OcrDraftWrite = {
+  revision: number;
+  coveredImageIds: number[];
+  items: Array<{
+    draftItemId: number | null;
+    name: string | null;
+    price: number | null;
+    quantity: number | null;
+    memberIds: number[];
+    excludedFromSettlement: boolean;
+    removed: boolean;
+  }>;
+};
+
+export type ReceiptImage = {
+  imageId: number;
+  order: number;
+  url: string;
+  expiresAt: string;
+  contentType: string;
+};
+export type OcrPoint = { x: number; y: number };
+export type OcrSourceDetail = Partial<Record<'name' | 'quantity' | 'unitPrice' | 'lineAmount', { box?: OcrPoint[] }>>;

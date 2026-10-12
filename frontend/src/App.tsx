@@ -16,6 +16,8 @@ import {
   X
 } from 'lucide-react';
 import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { ImageReceiptPanel, ReceiptOcrPanel } from './ImageReceiptPanel';
+import { ManualItemForm } from './ManualItemForm';
 import {
   addManualMember,
   createManualReceipt,
@@ -753,11 +755,21 @@ function RoomWorkspace({
 }) {
   const [members, setMembers] = useState<RoomMember[]>([]);
   const [receipts, setReceipts] = useState<ReceiptSummary[]>([]);
-  const [selectedReceiptId, setSelectedReceiptId] = useState<number | null>(null);
+  const [selectedReceiptId, updateSelectedReceiptId] = useState<number | null>(null);
+  const autoSelectReceipt = useRef(true);
   const [selectedReceipt, setSelectedReceipt] = useState<ReceiptDetail | null>(null);
   const [settlement, setSettlement] = useState<Settlement | null>(null);
   const [loading, setLoading] = useState(false);
   const [assignees, setAssignees] = useState<Record<number, number[]>>({});
+  const receiptLoadVersion = useRef(0);
+  const selectedReceiptIdRef = useRef(selectedReceiptId);
+  selectedReceiptIdRef.current = selectedReceiptId;
+
+  function setSelectedReceiptId(receiptId: number | null) {
+    autoSelectReceipt.current = false;
+    selectedReceiptIdRef.current = receiptId;
+    updateSelectedReceiptId(receiptId);
+  }
 
   const token = auth.accessToken;
 
@@ -776,32 +788,41 @@ function RoomWorkspace({
         room.roomId,
         memberResult.members.some((member) => member.owner && member.userId === auth.userId)
       );
-      if (!selectedReceiptId && receiptResult[0]) {
-        setSelectedReceiptId(receiptResult[0].receiptId);
+      if (autoSelectReceipt.current) {
+        autoSelectReceipt.current = false;
+        updateSelectedReceiptId(receiptResult[0]?.receiptId ?? null);
       }
     } catch (error) {
       setNotice({ kind: 'error', text: error instanceof Error ? error.message : '방 데이터를 불러오지 못했습니다.' });
+      return false;
     } finally {
       setLoading(false);
     }
   }
 
   async function refreshReceipt(receiptId = selectedReceiptId) {
+    // A delayed mutation on an old receipt must not cancel or replace the current selection's load.
+    if (receiptId !== null && receiptId !== selectedReceiptIdRef.current) return;
+    const version = ++receiptLoadVersion.current;
     if (!receiptId) {
       setSelectedReceipt(null);
       return;
     }
     try {
       const detail = await getReceipt(token, room.roomId, receiptId);
+      if (version !== receiptLoadVersion.current || receiptId !== selectedReceiptIdRef.current) return;
       setSelectedReceipt(detail);
       setAssignees(Object.fromEntries(detail.items.map(item => [item.itemId, item.memberIds])));
     } catch (error) {
       setNotice({ kind: 'error', text: error instanceof Error ? error.message : '영수증을 불러오지 못했습니다.' });
+      return false;
     }
   }
 
   useEffect(() => {
-    setSelectedReceiptId(null);
+    autoSelectReceipt.current = true;
+    selectedReceiptIdRef.current = null;
+    updateSelectedReceiptId(null);
     setSelectedReceipt(null);
     setAssignees({});
     void refreshRoom();
@@ -867,6 +888,7 @@ function RoomWorkspace({
 
       {activeTab === 'receipts' && (
         <ReceiptsView
+          currentUserId={auth.userId}
           token={token}
           roomId={room.roomId}
           members={members}
@@ -895,7 +917,8 @@ function RoomWorkspace({
   );
 }
 
-function ReceiptsView({
+export function ReceiptsView({
+  currentUserId,
   token,
   roomId,
   members,
@@ -909,6 +932,7 @@ function ReceiptsView({
   refreshReceipt,
   setNotice
 }: {
+  currentUserId?: number;
   token: string;
   roomId: number;
   members: RoomMember[];
@@ -918,14 +942,20 @@ function ReceiptsView({
   selectedReceipt: ReceiptDetail | null;
   assignees: Record<number, number[]>;
   setAssignees: (value: Record<number, number[]> | ((current: Record<number, number[]>) => Record<number, number[]>)) => void;
-  refreshRoom: () => Promise<void>;
-  refreshReceipt: (receiptId?: number | null) => Promise<void>;
+  refreshRoom: () => Promise<void | boolean>;
+  refreshReceipt: (receiptId?: number | null) => Promise<void | boolean>;
   setNotice: (notice: Notice) => void;
 }) {
   const [receiptAction, setReceiptAction] = useState<number | null>(null);
   const [newDraftVersion, setNewDraftVersion] = useState(0);
+  const [creationMode, setCreationMode] = useState<'image' | 'manual'>('image');
+  const manualItemFormRef = useRef<HTMLFormElement>(null);
+  const activeReceipt = selectedReceipt?.receiptId === selectedReceiptId && selectedReceipt?.roomId === roomId
+    ? selectedReceipt : null;
+  const detailLoading = selectedReceiptId !== null && activeReceipt === null;
 
   function handleNewReceiptDraft() {
+    setCreationMode('image');
     setSelectedReceiptId(null);
     void refreshReceipt(null);
     setNewDraftVersion((version) => version + 1);
@@ -956,30 +986,19 @@ function ReceiptsView({
 
   return (
     <section className="receipt-grid">
-      <ManualReceiptPanel
-        token={token}
-        roomId={roomId}
-        members={members}
-        editReceipt={selectedReceiptId === selectedReceipt?.receiptId ? selectedReceipt : null}
-        newDraftVersion={newDraftVersion}
-        setSelectedReceiptId={setSelectedReceiptId}
-        refreshRoom={refreshRoom}
-        refreshReceipt={refreshReceipt}
-        setNotice={setNotice}
-      />
-
-      <div className="panel receipt-list-panel">
+      <div className="panel receipt-list-panel" role="region" aria-label="영수증 목록">
         <PanelHeader
           icon={<ReceiptText size={19} />}
           title="영수증"
           count={receipts.length}
           action={
-            <button className="icon-action" type="button" title="새 영수증" onClick={handleNewReceiptDraft}>
+            <button className="icon-action" type="button" title="새 영수증" aria-label="새 영수증" onClick={handleNewReceiptDraft}>
               <Plus size={15} />
             </button>
           }
         />
         <div className="receipt-list">
+          {receipts.length === 0 && <p className="draft-help">등록된 영수증이 없습니다. 아래에서 사진을 첨부하거나 수동으로 입력해주세요.</p>}
           {receipts.map((receipt) => (
             <div
               key={receipt.receiptId}
@@ -990,7 +1009,7 @@ function ReceiptsView({
                   <strong>{receipt.name}</strong>
                   <small>{formatDate(receipt.purchasedAt ?? receipt.createdAt)}</small>
                 </span>
-                <b>{formatMoney(receipt.declaredTotal)}</b>
+                <b>{receipt.declaredTotal === null ? '미확정' : formatMoney(receipt.declaredTotal)}</b>
               </button>
               <button
                 className="icon-action danger"
@@ -1006,17 +1025,51 @@ function ReceiptsView({
         </div>
       </div>
 
-      <ReceiptDetailPanel
+      {selectedReceiptId === null && <section className="receipt-composer" aria-label="새 영수증 입력">
+        <div className="receipt-entry-tabs" role="group" aria-label="새 영수증 입력 방식">
+          <button type="button" aria-pressed={creationMode === 'image'} onClick={() => setCreationMode('image')}>영수증 사진 첨부</button>
+          <button type="button" aria-pressed={creationMode === 'manual'} onClick={() => setCreationMode('manual')}>수동입력</button>
+        </div>
+        <div className="receipt-entry-pane" hidden={creationMode !== 'image'}>
+          <ImageReceiptPanel key={`upload-${roomId}-${newDraftVersion}`} token={token} roomId={roomId} onUploaded={async receiptId => {
+            setSelectedReceiptId(receiptId);
+            await refreshRoom();
+            await refreshReceipt(receiptId);
+          }} />
+        </div>
+        <div className="receipt-entry-pane" hidden={creationMode !== 'manual'}>
+          <ManualReceiptPanel token={token} roomId={roomId} members={members} editReceipt={null}
+            newDraftVersion={newDraftVersion} setSelectedReceiptId={setSelectedReceiptId}
+            refreshRoom={refreshRoom} refreshReceipt={refreshReceipt} setNotice={setNotice} />
+        </div>
+      </section>}
+
+      {detailLoading ? <div className="panel detail-panel" role="status">선택한 영수증을 불러오는 중…</div> :
+        <>
+        {activeReceipt?.sourceType === 'MANUAL' && <ManualReceiptPanel
+          token={token} roomId={roomId} members={members} editReceipt={activeReceipt}
+          newDraftVersion={newDraftVersion} setSelectedReceiptId={setSelectedReceiptId}
+          refreshRoom={refreshRoom} refreshReceipt={refreshReceipt} setNotice={setNotice} />}
+        {activeReceipt?.sourceType === 'IMAGE_UPLOAD' &&
+        <ReceiptOcrPanel key={`${roomId}-${activeReceipt.receiptId}`} token={token} roomId={roomId}
+          receiptId={activeReceipt.receiptId} name={activeReceipt.name} members={members} currentUserId={currentUserId}
+          onAddManualItem={() => {
+            manualItemFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            manualItemFormRef.current?.querySelector('input')?.focus({ preventScroll: true });
+          }}
+          onApplied={async () => { await refreshReceipt(activeReceipt.receiptId); await refreshRoom(); }} />}
+        {activeReceipt && <ReceiptDetailPanel key={`detail-${roomId}-${activeReceipt.receiptId}`}
+        manualItemFormRef={manualItemFormRef}
         token={token}
         roomId={roomId}
         members={members}
-        receipt={selectedReceipt}
+        receipt={activeReceipt}
         assignees={assignees}
         setAssignees={setAssignees}
         refreshRoom={refreshRoom}
         refreshReceipt={refreshReceipt}
         setNotice={setNotice}
-      />
+      />}</>}
     </section>
   );
 }
@@ -1038,8 +1091,8 @@ export function ManualReceiptPanel({
   editReceipt: ReceiptDetail | null;
   newDraftVersion: number;
   setSelectedReceiptId: (id: number | null) => void;
-  refreshRoom: () => Promise<void>;
-  refreshReceipt: (receiptId?: number | null) => Promise<void>;
+  refreshRoom: () => Promise<void | boolean>;
+  refreshReceipt: (receiptId?: number | null) => Promise<void | boolean>;
   setNotice: (notice: Notice) => void;
 }) {
   const [name, setName] = useState(DEFAULT_RECEIPT_NAME);
@@ -1129,6 +1182,7 @@ export function ManualReceiptPanel({
     <form className="panel manual-panel" onSubmit={handleSubmit}>
       <fieldset className="receipt-fieldset" disabled={submitting}>
         <PanelHeader icon={<Plus size={19} />} title={isEditing ? "영수증 수정" : "수동 입력"} />
+        {!isEditing && <p className="draft-help">새 영수증을 작성하고 있습니다. 저장하면 해당 영수증의 상세 내역이 표시됩니다. 기존 영수증에 품목을 추가하려면 목록에서 해당 영수증을 선택하세요.</p>}
         <Field label="상호명">
           <input
             value={name}
@@ -1280,6 +1334,7 @@ export function ManualReceiptPanel({
 }
 
 function ReceiptDetailPanel({
+  manualItemFormRef,
   token,
   roomId,
   members,
@@ -1290,14 +1345,15 @@ function ReceiptDetailPanel({
   refreshReceipt,
   setNotice
 }: {
+  manualItemFormRef: React.RefObject<HTMLFormElement | null>;
   token: string;
   roomId: number;
   members: RoomMember[];
   receipt: ReceiptDetail | null;
   assignees: Record<number, number[]>;
   setAssignees: (value: Record<number, number[]> | ((current: Record<number, number[]>) => Record<number, number[]>)) => void;
-  refreshRoom: () => Promise<void>;
-  refreshReceipt: (receiptId?: number | null) => Promise<void>;
+  refreshRoom: () => Promise<void | boolean>;
+  refreshReceipt: (receiptId?: number | null) => Promise<void | boolean>;
   setNotice: (notice: Notice) => void;
 }) {
   const [editPayerMemberId, setEditPayerMemberId] = useState('');
@@ -1378,7 +1434,7 @@ function ReceiptDetailPanel({
   }
 
   return (
-    <div className="panel detail-panel">
+    <div className="panel detail-panel" role="region" aria-label="영수증 상세">
       <PanelHeader icon={<ReceiptText size={19} />} title={currentReceipt.name} count={currentReceipt.items.length} />
       <div className="receipt-total-strip">
         <span>품목 합계</span>
@@ -1405,6 +1461,16 @@ function ReceiptDetailPanel({
         {savingReceiptMeta && <span className="autosave-status">저장 중</span>}
       </div>
       {currentReceipt.warning && <div className="warning-badge">{currentReceipt.warning}</div>}
+
+      {currentReceipt.sourceType === 'IMAGE_UPLOAD' && <ManualItemForm
+        token={token} roomId={roomId} receiptId={currentReceipt.receiptId} formRef={manualItemFormRef}
+        onAdded={async () => {
+          if (await refreshReceipt(currentReceipt.receiptId) === false || await refreshRoom() === false) {
+            throw new Error('저장 후 화면 갱신 실패');
+          }
+          setNotice({ kind: 'success', text: '이 영수증에 품목을 추가했습니다. 참여자를 지정해주세요.' });
+        }} />}
+      {currentReceipt.items.length === 0 && <p className="empty-box">아직 정산 품목이 없습니다. 인식 결과를 검토하여 정산에 반영하거나 품목을 수동으로 추가해주세요.</p>}
 
       <div className="item-stack">
         {currentReceipt.items.map((item) => {
@@ -1617,7 +1683,7 @@ function MemberPanel({
   roomId: number;
   currentUserId: number;
   members: RoomMember[];
-  refreshRoom: () => Promise<void>;
+  refreshRoom: () => Promise<void | boolean>;
   onLeaveRoom: () => void;
   setNotice: (notice: Notice) => void;
   className?: string;

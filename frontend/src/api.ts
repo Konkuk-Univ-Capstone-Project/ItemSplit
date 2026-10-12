@@ -5,6 +5,9 @@ import type {
   ItemWriteRequest,
   ItemWriteResult,
   ReceiptDetail,
+  ReceiptImage,
+  ReceiptOcrJob,
+  OcrDraftWrite,
   ReceiptItem,
   ReceiptSummary,
   RoomMember,
@@ -157,6 +160,27 @@ export function getReceipt(token: string, roomId: number, receiptId: number) {
   return request<ReceiptDetail>(`/api/rooms/${roomId}/receipts/${receiptId}`, { token });
 }
 
+export function uploadReceiptImage(token: string, roomId: number, file: File, name: string) {
+  const body = new FormData();
+  body.append('file', file);
+  body.append('name', name);
+  return request<{ receiptId: number }>(`/api/rooms/${roomId}/receipts/image`, { method: 'POST', token, body });
+}
+
+export function startReceiptOcr(token: string, roomId: number, receiptId: number, requestId: string) {
+  return request<ReceiptOcrJob>(`/api/rooms/${roomId}/receipts/${receiptId}/ocr/jobs`, {
+    method: 'POST', token, body: JSON.stringify({ requestId })
+  });
+}
+
+export function getLatestReceiptOcr(token: string, roomId: number, receiptId: number) {
+  return request<ReceiptOcrJob | null>(`/api/rooms/${roomId}/receipts/${receiptId}/ocr/jobs/latest`, { token });
+}
+
+export function getReceiptOcr(token: string, roomId: number, receiptId: number, jobId: number) {
+  return request<ReceiptOcrJob>(`/api/rooms/${roomId}/receipts/${receiptId}/ocr/jobs/${jobId}`, { token });
+}
+
 export function createManualReceipt(
   token: string,
   roomId: number,
@@ -267,4 +291,21 @@ export function getSettlement(token: string, roomId: number) {
 
 export function getSharedSettlement(shareToken: string) {
   return request<SharedSettlement>(`/api/shared/rooms/${encodeURIComponent(shareToken)}/settlements`);
+}
+
+export function saveReceiptOcrDraft(token: string, roomId: number, receiptId: number, jobId: number, payload: OcrDraftWrite) {
+  return request<ReceiptOcrJob>(`/api/rooms/${roomId}/receipts/${receiptId}/ocr/jobs/${jobId}/draft`, {
+    method: 'PUT', token, body: JSON.stringify(payload)
+  });
+}
+
+export function applyReceiptOcrDraft(token: string, roomId: number, receiptId: number, jobId: number, revision: number) {
+  return request<ReceiptDetail>(`/api/rooms/${roomId}/receipts/${receiptId}/ocr/jobs/${jobId}/draft/apply`, {
+    method: 'POST', token, body: JSON.stringify({ revision, reviewConfirmed: true })
+  });
+}
+
+export async function getReceiptImages(token: string, roomId: number, receiptId: number) {
+  const images = await request<ReceiptImage[]>(`/api/rooms/${roomId}/receipts/${receiptId}/images`, { token });
+  return images.map(image => ({ ...image, url: image.url.startsWith('/') ? `${API_BASE_URL}${image.url}` : image.url }));
 }
