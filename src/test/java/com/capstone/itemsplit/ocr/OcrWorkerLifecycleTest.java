@@ -90,7 +90,7 @@ class OcrWorkerLifecycleTest {
         User observer = user();
         members.save(RoomMember.create(rooms.findById(actor.roomId()).orElseThrow(), observer));
         // The demo initially chooses the creator as payer; remove that reference before membership deletion.
-        receiptService.updateReceipt(actor.roomId(), receipt.receiptId(), actor.userId(), "demo", null, null, null);
+        receiptService.updateReceipt(actor.roomId(), receipt.receiptId(), actor.userId(), "demo", null, null);
         try (var held = new HeldRecognition()) {
             var started = start(actor, receipt);
             held.awaitEntered();

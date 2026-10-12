@@ -1009,7 +1009,7 @@ export function ReceiptsView({
                   <strong>{receipt.name}</strong>
                   <small>{formatDate(receipt.purchasedAt ?? receipt.createdAt)}</small>
                 </span>
-                <b>{receipt.declaredTotal === null ? (receipt.sourceType === 'MANUAL' ? '품목 합계 자동 적용' : '미확정') : formatMoney(receipt.declaredTotal)}</b>
+                <b>{formatMoney(receipt.itemsTotal)}</b>
               </button>
               <button
                 className="icon-action danger"
@@ -1100,7 +1100,6 @@ export function ManualReceiptPanel({
   const [participantIds, setParticipantIds] = useState<number[]>([]);
   const [purchasedAt, setPurchasedAt] = useState(todayInputValue);
   const [items, setItems] = useState<DraftItem[]>(() => cloneDefaultDraftItems());
-  const [declaredTotal, setDeclaredTotal] = useState('');
   const createAttempt = useRef<ReturnType<typeof getCreateAttempt> | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const ownerPayerId = useMemo(() => members.find((member) => member.owner)?.memberId ?? null, [members]);
@@ -1109,7 +1108,6 @@ export function ManualReceiptPanel({
   useEffect(() => {
     if (editReceipt) {
       setName(editReceipt.name);
-      setDeclaredTotal(editReceipt.declaredTotal === null ? '' : String(editReceipt.declaredTotal));
       setParticipantIds([]);
       setPayerMemberId(editReceipt.payerMemberId !== null ? String(editReceipt.payerMemberId) : '');
       setPurchasedAt(editReceipt.purchasedAt?.slice(0, 10) ?? '');
@@ -1118,7 +1116,6 @@ export function ManualReceiptPanel({
     }
 
     createAttempt.current = null;
-    setDeclaredTotal('');
     setName(DEFAULT_RECEIPT_NAME);
     setPayerMemberId(ownerPayerId !== null ? String(ownerPayerId) : '');
     setParticipantIds([]);
@@ -1149,7 +1146,7 @@ export function ManualReceiptPanel({
     setSubmitting(true);
     setNotice(null);
     try {
-      const payload = normalizeReceiptDraft({ name, payerMemberId, declaredTotal, purchasedAt, items });
+      const payload = normalizeReceiptDraft({ name, payerMemberId, purchasedAt, items });
       if (editReceipt) {
         await updateReceiptContents(token, roomId, editReceipt.receiptId, payload);
         await refreshRoom();
@@ -1212,20 +1209,10 @@ export function ManualReceiptPanel({
               ))}
             </select>
           </Field>
-          <Field label="원본 총액 (미입력 가능)">
-            <input value={declaredTotal} onChange={event => setDeclaredTotal(event.target.value)} inputMode="numeric" placeholder={editReceipt?.sourceType === 'IMAGE_UPLOAD' ? '미확정' : '미입력 시 품목 합계 자동 적용'} />
-          </Field>
         </div>
         <div className="total-confirmation">
           <span>전체 품목 합계: {itemTotal === null ? '입력 확인 필요' : formatMoney(itemTotal)}</span>
-          {(!editReceipt || editReceipt.sourceType === 'MANUAL') && (
-            <button className="button ghost dense" type="button" disabled={itemTotal === null || itemTotal <= 0}
-              onClick={() => { if (itemTotal !== null) setDeclaredTotal(String(itemTotal)); }}>품목 합계로 총액 확인</button>
-          )}
-          {editReceipt?.sourceType === 'IMAGE_UPLOAD' && <small>이미지에 적힌 원본 총액을 직접 입력해주세요.</small>}
-          <small>제외 품목도 합계에 포함됩니다. 직접 입력한 총액은 품목을 수정해도 바뀌지 않습니다.</small>
-          {(!editReceipt || editReceipt.sourceType === 'MANUAL') && !declaredTotal && <small>총액을 입력하지 않으면 현재 품목 합계를 정산 총액으로 자동 확정합니다.</small>}
-          {declaredTotal && itemTotal !== null && Number(declaredTotal) !== itemTotal && <span className="warning-badge">원본 총액과 품목 합계가 다릅니다. 초안 저장 후 수정할 수 있습니다.</span>}
+          <small>품목의 단가와 수량으로 자동 계산합니다. 제외 품목도 합계에 포함됩니다.</small>
         </div>
         <div className="field manual-assignee-field">
           <span>참여자 일괄 지정</span>
@@ -1388,7 +1375,6 @@ function ReceiptDetailPanel({
       await updateReceipt(token, roomId, currentReceipt.receiptId, {
         name: currentReceipt.name,
         payerMemberId: numberOrNull(nextPayerMemberId),
-        declaredTotal: currentReceipt.declaredTotal,
         purchasedAt: currentReceipt.purchasedAt
       });
       await refreshReceipt(currentReceipt.receiptId);
@@ -1461,7 +1447,6 @@ function ReceiptDetailPanel({
         </Field>
         {savingReceiptMeta && <span className="autosave-status">저장 중</span>}
       </div>
-      {currentReceipt.warning && <div className="warning-badge">{currentReceipt.warning}</div>}
 
       {currentReceipt.sourceType === 'IMAGE_UPLOAD' && <ManualItemForm
         token={token} roomId={roomId} receiptId={currentReceipt.receiptId} formRef={manualItemFormRef}

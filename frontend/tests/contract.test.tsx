@@ -42,7 +42,7 @@ test('OCR start reuses its request ID and status reads never POST another job', 
 
 const receipt = {
   receiptId: 7, roomId: 1, name: 'Dinner', sourceType: 'MANUAL', payerMemberId: 12,
-  payerNickname: 'A', declaredTotal: 8000, purchasedAt: null, createdAt: '', warning: null,
+  payerNickname: 'A', itemsTotal: 8000, purchasedAt: null, createdAt: '',
   items: [
     { itemId: 1, name: 'A', price: 1000, quantity: 2, memberIds: [12], excludedFromSettlement: false },
     { itemId: 2, name: 'B', price: 3000, quantity: 1, memberIds: [15], excludedFromSettlement: false },
@@ -60,13 +60,14 @@ test('switching receipt selection hides the previous image OCR panel until detai
   assert.match(html, /선택한 영수증을 불러오는 중/);
 });
 
-test('image receipt list shows an unconfirmed total instead of zero', () => {
-  const photo = { ...receipt, sourceType: 'IMAGE_UPLOAD', declaredTotal: null };
+test('image receipt list shows calculated item total', () => {
+  const photo = { ...receipt, sourceType: 'IMAGE_UPLOAD' };
   const html = renderToStaticMarkup(<ReceiptsView token="token" roomId={1} members={[]}
     receipts={[photo]} selectedReceiptId={7} setSelectedReceiptId={() => {}}
     selectedReceipt={photo} assignees={{}} setAssignees={() => {}}
     refreshRoom={async () => {}} refreshReceipt={async () => {}} setNotice={() => {}} />);
-  assert.match(html, /미확정/);
+  assert.match(html, /<b>8,000원<\/b>/);
+  assert.doesNotMatch(html, /미확정/);
   assert.doesNotMatch(html, />0원</);
 });
 
@@ -132,44 +133,42 @@ test('opening an existing receipt preserves separate assignments and exclusion',
 test('blocked settlement shows reasons without transfers or an all-clear empty result', () => {
   const html = renderToStaticMarkup(<SettlementBoard settlement={{
     roomId: 1, roomName: 'Room', ready: false, members: [],
-    issues: [{ code: 'TOTAL_MISSING', receiptId: 7, receiptName: '팀회식', itemId: null, message: '원본 총액을 입력해주세요.' }]
+    issues: [{ code: 'PAYER_MISSING', receiptId: 7, receiptName: '팀회식', itemId: null, message: '결제자를 지정해주세요.' }]
   }} />);
-  assert.match(html, /원본 총액을 입력해주세요/);
+  assert.match(html, /결제자를 지정해주세요/);
   assert.match(html, /팀회식/);
   assert.doesNotMatch(html, /영수증 #7/);
   assert.doesNotMatch(html, /송금할 내역이 없습니다/);
   assert.doesNotMatch(html, /transfer-section/);
 });
 
-const draft = () => ({ name: 'Dinner', payerMemberId: '12', declaredTotal: '8000', purchasedAt: '',
+const draft = () => ({ name: 'Dinner', payerMemberId: '12', purchasedAt: '',
   items: receiptItemsToDraftItems(receipt) });
 
-test('metadata and price changes retain each assignment and independent declared total', () => {
+test('metadata and price changes retain assignments without sending a manual total', () => {
   const input = draft();
   input.name = 'Updated dinner';
   input.items[0].price = '2000';
   const payload = normalizeReceiptDraft(input);
-  assert.equal(payload.declaredTotal, 8000);
+  assert.equal(Object.hasOwn(payload, 'declaredTotal'), false);
+  assert.equal(payload.items[0].price, 2000);
   assert.deepEqual(payload.items.map(item => item.memberIds), [[12], [15], []]);
   assert.deepEqual(payload.items.map(item => item.itemId), [1, 2, 3]);
 });
 
-test('nullable total and unassigned participants are valid drafts', () => {
+test('item-only receipts and unassigned participants are valid drafts', () => {
   const input = draft();
-  input.declaredTotal = '';
   input.items[0].memberIds = [];
   const payload = normalizeReceiptDraft(input);
-  assert.equal(payload.declaredTotal, null);
+  assert.equal(Object.hasOwn(payload, 'declaredTotal'), false);
   assert.deepEqual(payload.items[0].memberIds, []);
 });
 
 for (const [field, value] of [['price', '1000001'], ['price', '1e3'], ['price', '9007199254740993'],
-  ['quantity', '1000'], ['quantity', '1.2'], ['price', '0'], ['declaredTotal', '10000001'],
-  ['declaredTotal', 'Infinity'], ['declaredTotal', '-1'], ['declaredTotal', '1.5']]) {
+  ['quantity', '1000'], ['quantity', '1.2'], ['price', '0']]) {
   test(`rejects invalid ${field}: ${value}`, () => {
     const input = draft();
-    if (field === 'declaredTotal') input.declaredTotal = value;
-    else input.items[0][field] = value;
+    input.items[0][field] = value;
     assert.throws(() => normalizeReceiptDraft(input));
   });
 }
@@ -243,17 +242,14 @@ test('a valid shared settlement without readiness fields renders transfers', () 
 });
 
 for (const sourceType of ['MANUAL', 'IMAGE_UPLOAD', null]) {
-  test(`sum confirmation availability for ${sourceType ?? 'new manual'} receipts`, () => {
+  test(`item-only total display for ${sourceType ?? 'new manual'} receipts`, () => {
     const html = renderToStaticMarkup(<ManualReceiptPanel
       token="token" roomId={1} members={[]} editReceipt={sourceType ? { ...receipt, sourceType } : null}
       newDraftVersion={0} setSelectedReceiptId={() => {}} refreshRoom={async () => {}}
       refreshReceipt={async () => {}} setNotice={() => {}} />);
-    if (sourceType === 'IMAGE_UPLOAD') {
-      assert.doesNotMatch(html, /품목 합계로 총액 확인/);
-    } else {
-      assert.match(html, /품목 합계로 총액 확인/);
-    }
-    assert.match(html, /원본 총액/);
+    assert.doesNotMatch(html, /품목 합계로 총액 확인|원본 총액|직접 입력한 총액/);
+    assert.match(html, /전체 품목 합계/);
+    assert.match(html, /제외 품목도 합계에 포함됩니다/);
   });
 }
 

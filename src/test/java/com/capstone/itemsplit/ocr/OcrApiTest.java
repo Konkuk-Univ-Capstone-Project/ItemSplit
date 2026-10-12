@@ -218,6 +218,7 @@ class OcrApiTest {
     @Test void concurrentApplyAppendsAndPreservesExistingItemsAndMetadata() throws Exception {
         Actor a=actor();long id=demo(a,"NORMAL");start(a,id,"concurrent-apply");var job=complete(a,id);
         jdbc.update("insert into items(receipt_id,name,price,quantity,excluded_from_settlement) values(?,?,?,?,?)",id,"기존 수기 품목",100,1,true);
+        jdbc.execute("alter table receipts add column if not exists declared_total bigint");
         jdbc.update("update receipts set name=?,declared_total=? where id=?","사용자가 입력한 이름",100,id);
         String url=path(a,id)+"/"+job.path("jobId").asLong()+"/draft/apply";
         String body=json.writeValueAsString(Map.of("revision",job.at("/draft/revision").asLong(),"reviewConfirmed",true));
@@ -228,7 +229,7 @@ class OcrApiTest {
             assertThat(f1.get(10,TimeUnit.SECONDS)).isEqualTo(200);assertThat(f2.get(10,TimeUnit.SECONDS)).isEqualTo(200);
         }
         assertThat(jdbc.queryForObject("select count(*) from items where receipt_id=?",Integer.class,id)).isEqualTo(3);
-        assertThat(receipts.findById(id).orElseThrow().getDeclaredTotal()).isEqualTo(100);
+        assertThat(jdbc.queryForObject("select declared_total from receipts where id=?", Long.class, id)).isEqualTo(100);
         assertThat(receipts.findById(id).orElseThrow().getName()).isEqualTo("사용자가 입력한 이름");
     }
 

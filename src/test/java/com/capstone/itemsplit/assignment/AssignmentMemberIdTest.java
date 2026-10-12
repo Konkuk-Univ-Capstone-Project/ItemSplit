@@ -42,7 +42,7 @@ class AssignmentMemberIdTest {
         ReflectionTestUtils.setField(room, "id", 1L);
         RoomMember member = RoomMember.create(room, user);
         ReflectionTestUtils.setField(member, "id", 42L);
-        Receipt receipt = Receipt.createManual(room, "receipt", member, null, null);
+        Receipt receipt = Receipt.createManual(room, "receipt", member, null);
         ReflectionTestUtils.setField(receipt, "id", 2L);
         Item item = Item.create(receipt, "item", 100, 1);
         ReflectionTestUtils.setField(item, "id", 3L);

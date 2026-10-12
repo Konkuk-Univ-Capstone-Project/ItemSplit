@@ -39,7 +39,7 @@ export type ReceiptSummary = {
   sourceType: 'MANUAL' | 'IMAGE_UPLOAD';
   payerMemberId: number | null;
   payerNickname: string | null;
-  declaredTotal: number | null;
+  itemsTotal: number;
   purchasedAt: string | null;
   createdAt: string;
 };
@@ -61,7 +61,6 @@ export type ItemWriteResult = Omit<ReceiptItem, 'memberIds'> & {
 
 export type ReceiptDetail = ReceiptSummary & {
   items: ReceiptItem[];
-  warning: string | null;
 };
 
 export type ReceiptOcrJob = {

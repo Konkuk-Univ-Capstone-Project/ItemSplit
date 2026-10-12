@@ -187,7 +187,6 @@ export function createManualReceipt(
   payload: {
     name: string;
     payerMemberId: number | null;
-    declaredTotal: number | null;
     purchasedAt: string | null;
     requestId: string;
     items: Array<Omit<ReceiptItem, 'itemId'>>;
@@ -214,7 +213,6 @@ export function updateReceipt(
   payload: {
     name: string;
     payerMemberId: number | null;
-    declaredTotal: number | null;
     purchasedAt: string | null;
   }
 ) {
@@ -232,7 +230,6 @@ export function updateReceiptContents(
   payload: {
     name: string;
     payerMemberId: number | null;
-    declaredTotal: number | null;
     purchasedAt: string | null;
     items: Array<Omit<ReceiptItem, 'itemId'> & { itemId: number | null }>;
   }

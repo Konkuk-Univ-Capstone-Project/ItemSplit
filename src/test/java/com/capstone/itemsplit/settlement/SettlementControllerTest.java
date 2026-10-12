@@ -79,7 +79,7 @@ class SettlementControllerTest {
 		RoomMember ownerMember = roomMemberRepository.save(RoomMember.create(room, owner));
 		RoomMember memberMember = roomMemberRepository.save(RoomMember.create(room, member));
 
-		Receipt receipt = receiptRepository.save(Receipt.createManual(room, "저녁식사", ownerMember, 45000L, null));
+		Receipt receipt = receiptRepository.save(Receipt.createManual(room, "저녁식사", ownerMember, null));
 		// 삼겹살 30000원 — owner, member 둘 다 참여 → 각 15000
 		Item pork = itemRepository.save(Item.create(receipt, "삼겹살", 30000, 1));
 		// 소주 15000원 — owner만 참여 → owner 15000
@@ -107,7 +107,7 @@ class SettlementControllerTest {
 		RoomMember memberMember = roomMemberRepository.save(RoomMember.create(room, member));
 
 		// owner가 결제자, 10000원 품목을 둘이 N빵
-		Receipt receipt = receiptRepository.save(Receipt.createManual(room, "카페", ownerMember, 10000L, null));
+		Receipt receipt = receiptRepository.save(Receipt.createManual(room, "카페", ownerMember, null));
 		Item coffee = itemRepository.save(Item.create(receipt, "아메리카노", 10000, 1));
 		assignmentRepository.save(Assignment.create(coffee, ownerMember));
 		assignmentRepository.save(Assignment.create(coffee, memberMember));
@@ -131,7 +131,7 @@ class SettlementControllerTest {
 		Room room = roomRepository.save(Room.create("room", owner));
 		RoomMember ownerMember = roomMemberRepository.save(RoomMember.create(room, owner));
 
-		Receipt receipt = receiptRepository.save(Receipt.createManual(room, "카페", null, null, null));
+		Receipt receipt = receiptRepository.save(Receipt.createManual(room, "카페", null, null));
 		itemRepository.save(Item.create(receipt, "아메리카노", 5000, 1)); // 배정 없음
 
 		mockMvc.perform(get("/api/rooms/{roomId}/settlements", room.getId())
@@ -150,7 +150,7 @@ class SettlementControllerTest {
 		Room room = roomRepository.save(Room.create("room", owner));
 		RoomMember ownerMember = roomMemberRepository.save(RoomMember.create(room, owner));
 
-		Receipt receipt = receiptRepository.save(Receipt.createManual(room, "카페", ownerMember, 4500L, null));
+		Receipt receipt = receiptRepository.save(Receipt.createManual(room, "카페", ownerMember, null));
 		Item item = itemRepository.save(Item.create(receipt, "아메리카노", 4500, 1));
 		assignmentRepository.save(Assignment.create(item, ownerMember));
 
@@ -172,7 +172,7 @@ class SettlementControllerTest {
 		RoomMember bMember = roomMemberRepository.save(RoomMember.create(room, b));
 
 		// 10000원을 3명이 나누면 3333 * 3 = 9999, 나머지 1원은 seeded random으로 참여자 중 1명에게
-		Receipt receipt = receiptRepository.save(Receipt.createManual(room, "식사", ownerMember, 10000L, null));
+		Receipt receipt = receiptRepository.save(Receipt.createManual(room, "식사", ownerMember, null));
 		Item item = itemRepository.save(Item.create(receipt, "찌개", 10000, 1));
 		assignmentRepository.save(Assignment.create(item, ownerMember));
 		assignmentRepository.save(Assignment.create(item, aMember));
@@ -234,20 +234,19 @@ class SettlementControllerTest {
 	}
 
 	@Test
-	void mismatchedTotalBlocksEvenFullyAssignedReceipt() throws Exception {
+	void fullyAssignedReceiptSettlesUsingItemSum() throws Exception {
 		User owner = createUser("owner@test.com", "owner");
 		Room room = roomRepository.save(Room.create("room", owner));
 		RoomMember payer = roomMemberRepository.save(RoomMember.create(room, owner));
-		Receipt receipt = receiptRepository.save(Receipt.createManual(room, "식사", payer, 4999L, null));
+		Receipt receipt = receiptRepository.save(Receipt.createManual(room, "식사", payer, null));
 		Item item = itemRepository.save(Item.create(receipt, "식사", 5000, 1));
 		assignmentRepository.save(Assignment.create(item, payer));
 		mockMvc.perform(get("/api/rooms/{roomId}/settlements", room.getId())
 				.header(HttpHeaders.AUTHORIZATION, bearer(owner)))
 			.andExpect(status().isOk())
-			.andExpect(jsonPath("$.data.ready").value(false))
-			.andExpect(jsonPath("$.data.members").isEmpty())
-			.andExpect(jsonPath("$.data.issues[0].code").value("TOTAL_MISMATCH"))
-			.andExpect(jsonPath("$.data.issues[0].receiptId").value(receipt.getId()));
+			.andExpect(jsonPath("$.data.ready").value(true))
+			.andExpect(jsonPath("$.data.members[0].paid").value(5000))
+			.andExpect(jsonPath("$.data.issues").isEmpty());
 	}
 
 	@Test
@@ -255,7 +254,7 @@ class SettlementControllerTest {
 		User owner = createUser("owner@test.com", "owner");
 		Room room = roomRepository.save(Room.create("room", owner));
 		RoomMember payer = roomMemberRepository.save(RoomMember.create(room, owner));
-		receiptRepository.save(Receipt.createManual(room, "식사", payer, 5000L, null));
+		receiptRepository.save(Receipt.createManual(room, "식사", payer, null));
 		mockMvc.perform(get("/api/rooms/{roomId}/settlements", room.getId())
 				.header(HttpHeaders.AUTHORIZATION, bearer(owner)))
 			.andExpect(status().isOk())
@@ -270,7 +269,7 @@ class SettlementControllerTest {
 		Room room = roomRepository.save(Room.create("room", owner));
 		RoomMember payer = roomMemberRepository.save(RoomMember.create(room, owner));
 		RoomMember other = roomMemberRepository.save(RoomMember.createManual(room, "다른 멤버"));
-		Receipt receipt = receiptRepository.save(Receipt.createManual(room, "식사", payer, 5L, null));
+		Receipt receipt = receiptRepository.save(Receipt.createManual(room, "식사", payer, null));
 		Item item = itemRepository.save(Item.create(receipt, "식사", 5, 1));
 		assignmentRepository.save(Assignment.create(item, payer));
 		assignmentRepository.save(Assignment.create(item, other));
@@ -287,12 +286,12 @@ class SettlementControllerTest {
 	}
 
 	@Test
-	void explicitExclusionReducesBurdenAndPaidButStillCountsTowardOriginalTotal() throws Exception {
+	void explicitExclusionReducesBurdenAndPaid() throws Exception {
 		User owner = createUser("owner@test.com", "owner");
 		Room room = roomRepository.save(Room.create("room", owner));
 		RoomMember payer = roomMemberRepository.save(RoomMember.create(room, owner));
 		RoomMember participant = roomMemberRepository.save(RoomMember.createManual(room, "참여자"));
-		Receipt receipt = receiptRepository.save(Receipt.createManual(room, "식사", payer, 34000L, null));
+		Receipt receipt = receiptRepository.save(Receipt.createManual(room, "식사", payer, null));
 		Item included = itemRepository.save(Item.create(receipt, "식사", 24000, 1));
 		Item excluded = Item.create(receipt, "개인 구매", 10000, 1);
 		excluded.setExcludedFromSettlement(true);
@@ -306,22 +305,21 @@ class SettlementControllerTest {
 			.andExpect(jsonPath("$.data.members[?(@.nickname=='owner')].paid").value(24000))
 			.andExpect(jsonPath("$.data.members[?(@.nickname=='owner')].burden").value(0))
 			.andExpect(jsonPath("$.data.members[?(@.nickname=='참여자')].net").value(-24000));
-		receipt.update("식사", payer, 24000L, null);
+		receipt.update("식사", payer, null);
 		receiptRepository.save(receipt);
 		mockMvc.perform(get("/api/rooms/{roomId}/settlements", room.getId())
 				.header(HttpHeaders.AUTHORIZATION, bearer(owner)))
 			.andExpect(status().isOk())
-			.andExpect(jsonPath("$.data.ready").value(false))
-			.andExpect(jsonPath("$.data.members").isEmpty())
-			.andExpect(jsonPath("$.data.issues[*].code", org.hamcrest.Matchers.hasItem("TOTAL_MISMATCH")));
+			.andExpect(jsonPath("$.data.ready").value(true))
+			.andExpect(jsonPath("$.data.issues").isEmpty());
 	}
 
 	@Test
-	void allExcludedReceiptNeedsNoPayerButStillRequiresMatchingTotal() throws Exception {
+	void allExcludedReceiptNeedsNoPayerOrTotal() throws Exception {
 		User owner = createUser("owner@test.com", "owner");
 		Room room = roomRepository.save(Room.create("room", owner));
 		roomMemberRepository.save(RoomMember.create(room, owner));
-		Receipt receipt = receiptRepository.save(Receipt.createManual(room, "개인 구매", null, 10000L, null));
+		Receipt receipt = receiptRepository.save(Receipt.createManual(room, "개인 구매", null, null));
 		Item excluded = Item.create(receipt, "개인 구매", 10000, 1);
 		excluded.setExcludedFromSettlement(true);
 		itemRepository.save(excluded);
@@ -332,7 +330,7 @@ class SettlementControllerTest {
 			.andExpect(jsonPath("$.data.members[0].paid").value(0))
 			.andExpect(jsonPath("$.data.members[0].burden").value(0))
 			.andExpect(jsonPath("$.data.members[0].net").value(0));
-		receipt.update("개인 구매", null, null, null);
+		receipt.update("개인 구매", null, null);
 		receiptRepository.save(receipt);
 		mockMvc.perform(get("/api/rooms/{roomId}/settlements", room.getId())
 				.header(HttpHeaders.AUTHORIZATION, bearer(owner)))
