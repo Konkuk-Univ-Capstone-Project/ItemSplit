@@ -327,3 +327,32 @@ test('image list requires member auth and OCR fields retain their source polygon
   assert.deepEqual(sourcePolygons(null), []);
   assert.deepEqual(sourcePolygons({ name: { box: [{ x: -1, y: 1 }] } }), []);
 });
+
+
+test('OCR errors expose HTTP status, reason and Retry-After even for a non-JSON response', async (t) => {
+  t.mock.method(globalThis, 'fetch', async () => new Response('Too many requests', {
+    status: 429, headers: { 'Retry-After': '12' }
+  }));
+  await assert.rejects(getReceiptOcr('token', 1, 7, 1), error => {
+    assert.equal(error.status, 429);
+    assert.equal(error.retryAfterMs, 12000);
+    return true;
+  });
+});
+
+
+test('Retry-After HTTP dates are exposed as remaining milliseconds', async t => {
+  t.mock.timers.enable({apis:['Date'],now:Date.parse('2026-10-12T12:00:00Z')});
+  t.mock.method(globalThis,'fetch',async()=>new Response('',{status:429,headers:{'Retry-After':'Mon, 12 Oct 2026 12:00:20 GMT'}}));
+  await assert.rejects(getReceiptOcr('token',1,7,1),e=>{assert.equal(e.retryAfterMs,20000);return true;});
+});
+
+
+test('network failure while reading an HTTP 200 body remains retryable', async t => {
+  t.mock.method(globalThis,'fetch',async()=>new Response(new ReadableStream({
+    start(controller){controller.error(new TypeError('connection lost while reading body'));}
+  }),{status:200}));
+  await assert.rejects(getReceiptOcr('token',1,7,1),TypeError);
+});
+
+import './ocrPolling.test';

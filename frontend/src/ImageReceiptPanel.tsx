@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { getLatestReceiptOcr, getReceiptOcr, startReceiptOcr, uploadReceiptImage } from './api';
 import { ReceiptImageViewer, sourcePolygons, type ImageSource } from './ReceiptImageViewer';
 import { OcrDraftEditor } from './OcrDraftEditor';
+import { watchOcrStatus } from './ocrPolling';
 import type { ReceiptOcrJob, RoomMember } from './types';
 
 const money = (value: number | null) => value === null ? '인식되지 않음' : `${value.toLocaleString('ko-KR')}원`;
@@ -65,6 +66,7 @@ const statusLabels: Record<ReceiptOcrJob['status'], string> = {
 };
 const providerErrors: Record<string, string> = {
   CONFIG_ERROR: 'OCR 연결 설정을 확인해주세요.', TIMEOUT: '인식 응답 시간이 초과되었습니다.',
+  PROVIDER_TIMEOUT: '인식 응답 시간이 초과되었습니다.', ACCESS_REVOKED: '사진 인식 권한이 없어 작업이 중단되었습니다.',
   RATE_LIMITED: 'OCR 호출 한도를 초과했습니다.', PROVIDER_ERROR: 'OCR 서비스에 연결하지 못했습니다.',
   EMPTY_RESULT: '사진에서 품목을 찾지 못했습니다.', RECOGNITION_FAILED: '영수증을 인식하지 못했습니다.',
   UNSUPPORTED_INPUT: '지원하지 않는 이미지입니다.', IMAGE_UNAVAILABLE: '저장된 사진을 읽지 못했습니다.',
@@ -90,33 +92,34 @@ export function ReceiptOcrPanel({ token, roomId, receiptId, name, members, curre
   const requestId = useRef<string | null>(null);
   const inFlight = useRef(false);
   const [reload, setReload] = useState(0);
+  const [pollNotice, setPollNotice] = useState('');
 
   useEffect(() => {
-    let cancelled = false;
-    setLoading(true); setError('');
-    getLatestReceiptOcr(token, roomId, receiptId)
-      .then(result => { if (!cancelled) setJob(result); })
-      .catch(e => { if (!cancelled) setError(errorMessage(e)); })
-      .finally(() => { if (!cancelled) setLoading(false); });
-    return () => { cancelled = true; };
+    setLoading(true); setError(''); setPollNotice('');
+    let jobId: number | undefined;
+    return watchOcrStatus({
+      read: async signal => {
+        const result = jobId === undefined ? await getLatestReceiptOcr(token, roomId, receiptId, signal)
+          : await getReceiptOcr(token, roomId, receiptId, jobId, signal);
+        if (result) jobId = result.jobId;
+        return result;
+      },
+      onResult: result => { setJob(result); setLoading(false); },
+      onWait: setPollNotice,
+      onError: e => { setError(errorMessage(e)); setLoading(false); }
+    });
   }, [token, roomId, receiptId, reload]);
 
-  useEffect(() => {
-    if (!job || !['PENDING', 'PROCESSING'].includes(job.status) || error || loading) return;
-    let cancelled = false;
-    const timer = window.setTimeout(() => {
-      getReceiptOcr(token, roomId, receiptId, job.jobId)
-        .then(result => { if (!cancelled) setJob(result); })
-        .catch(e => { if (!cancelled) setError(errorMessage(e)); });
-    }, 1500);
-    return () => { cancelled = true; window.clearTimeout(timer); };
-  }, [token, roomId, receiptId, job, error, loading]);
+  function handleSaved(result: ReceiptOcrJob) {
+    setJob(result);
+    if (['PENDING', 'PROCESSING'].includes(result.status)) setReload(v => v + 1);
+  }
 
   async function start() {
     if (inFlight.current || job || loading || error) return;
     inFlight.current = true; setStarting(true); setError('');
     requestId.current ??= crypto.randomUUID();
-    try { setJob(await startReceiptOcr(token, roomId, receiptId, requestId.current)); }
+    try { handleSaved(await startReceiptOcr(token, roomId, receiptId, requestId.current)); }
     catch (e) { setError(errorMessage(e)); }
     finally { inFlight.current = false; setStarting(false); }
   }
@@ -130,6 +133,7 @@ export function ReceiptOcrPanel({ token, roomId, receiptId, name, members, curre
     <div className="ocr-review-layout" data-mobile-pane={mobilePane}>
     <ReceiptImageViewer token={token} roomId={roomId} receiptId={receiptId} job={job} source={source} />
     <div className="ocr-review-content">
+    {pollNotice && <p role="status">{pollNotice}</p>}
     {loading ? <p role="status">인식 상태 확인 중…</p> : !job && !error && <>
       <p>업로드한 사진에서 품목과 금액을 읽습니다.</p>
       <button className="button primary" disabled={starting} onClick={start}>
@@ -150,7 +154,7 @@ export function ReceiptOcrPanel({ token, roomId, receiptId, name, members, curre
       </> :
         !['PENDING', 'PROCESSING'].includes(job.status) && (currentUserId === job.requestedByUserId ?
           <OcrDraftEditor key={`${job.jobId}-${job.draft.revision}-${reload}`} token={token} roomId={roomId} job={job}
-            members={members} onSaved={setJob} onApplied={onApplied} onSelectSource={selectSource} /> :
+            members={members} onSaved={handleSaved} onApplied={onApplied} onSelectSource={selectSource} /> :
           <p>영수증을 올린 사용자만 초안을 검토하고 정산에 반영할 수 있습니다.</p>)}
     </>}
     </div></div>
