@@ -22,6 +22,13 @@ import org.springframework.web.multipart.MultipartFile;
 public class ReceiptController {
     private final ReceiptService receiptService;
     private final ReceiptImageService receiptImageService;
+    private final ReceiptImageQueryService imageQueryService;
+
+    @GetMapping("/{receiptId}/images")
+    public ResponseEntity<ApiResponse<List<ReceiptImageQueryService.ImageView>>> images(@PathVariable Long roomId,
+        @PathVariable Long receiptId,@AuthenticationPrincipal AuthenticatedUser user) {
+        return ResponseEntity.ok().header("Cache-Control","no-store").body(ApiResponse.success(imageQueryService.list(roomId,receiptId,userId(user))));
+    }
 
     @GetMapping
     public ApiResponse<List<ReceiptService.ReceiptSummaryResult>> getReceipts(@PathVariable Long roomId,
