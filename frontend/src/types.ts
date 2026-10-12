@@ -93,7 +93,7 @@ export type ReceiptOcrJob = {
       name: string | null;
       price: number | null;
       quantity: number | null;
-      ocr: { lineAmount: number | null; detail?: OcrSourceDetail | null };
+      ocr: { unitPrice?: number | null; derivedUnitPrice?: number | null; lineAmount: number | null; detail?: OcrSourceDetail | null };
       issues: string[];
       warnings: string[];
     }>;

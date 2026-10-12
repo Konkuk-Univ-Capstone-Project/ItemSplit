@@ -328,7 +328,6 @@ test('image list requires member auth and OCR fields retain their source polygon
   assert.deepEqual(sourcePolygons({ name: { box: [{ x: -1, y: 1 }] } }), []);
 });
 
-
 test('OCR errors expose HTTP status, reason and Retry-After even for a non-JSON response', async (t) => {
   t.mock.method(globalThis, 'fetch', async () => new Response('Too many requests', {
     status: 429, headers: { 'Retry-After': '12' }
@@ -339,36 +338,6 @@ test('OCR errors expose HTTP status, reason and Retry-After even for a non-JSON 
     return true;
   });
 });
-
-
-test('Retry-After HTTP dates are exposed as remaining milliseconds', async t => {
-  t.mock.timers.enable({apis:['Date'],now:Date.parse('2026-10-12T12:00:00Z')});
-  t.mock.method(globalThis,'fetch',async()=>new Response('',{status:429,headers:{'Retry-After':'Mon, 12 Oct 2026 12:00:20 GMT'}}));
-  await assert.rejects(getReceiptOcr('token',1,7,1),e=>{assert.equal(e.retryAfterMs,20000);return true;});
-});
-
-
-test('network failure while reading an HTTP 200 body remains retryable', async t => {
-  t.mock.method(globalThis,'fetch',async()=>new Response(new ReadableStream({
-    start(controller){controller.error(new TypeError('connection lost while reading body'));}
-  }),{status:200}));
-  await assert.rejects(getReceiptOcr('token',1,7,1),TypeError);
-});
-
-import './ocrPolling.test';
-
-
-function reviewJob() {
-  return { jobId: 1, receiptId: 7, requestedByUserId: 1, status: 'PARTIALLY_FAILED', provider: 'CLOVA_RECEIPT',
-    images: [{ imageId: 41, status: 'FAILED', errorCode: 'PROVIDER_TIMEOUT', manuallyCovered: false,
-      retryable: true, attemptCount: 1, candidates: null }],
-    draft: { status: 'EDITING', revision: 2, itemsTotal: 0, warnings: [], blockers: ['IMAGE_FAILED_UNCOVERED'], items: [
-      { draftItemId: 1, imageId: 40, name: 'Soup', price: null, quantity: 2, memberIds: [12],
-        excludedFromSettlement: false, removed: false,
-        ocr: { unitPrice: null, lineAmount: 16000, derivedUnitPrice: 8000 }, issues: ['MISSING_PRICE'], warnings: [] }
-    ] } };
-}
-
 
 test('failed image retry only posts to that image and preserves structured quota reasons', async (t) => {
   const api = await import('../src/api');
@@ -389,6 +358,26 @@ test('failed image retry only posts to that image and preserves structured quota
   assert.deepEqual(sent, { url: '/api/rooms/1/receipts/7/ocr/jobs/2/images/41/retry', method: 'POST' });
 });
 
+function reviewJob() {
+  return { jobId: 1, receiptId: 7, requestedByUserId: 1, status: 'PARTIALLY_FAILED', provider: 'CLOVA_RECEIPT',
+    images: [{ imageId: 41, status: 'FAILED', errorCode: 'PROVIDER_TIMEOUT', manuallyCovered: false,
+      retryable: true, attemptCount: 1, candidates: null }],
+    draft: { status: 'EDITING', revision: 2, itemsTotal: 0, warnings: [], blockers: ['IMAGE_FAILED_UNCOVERED'], items: [
+      { draftItemId: 1, imageId: 40, name: 'Soup', price: null, quantity: 2, memberIds: [12],
+        excludedFromSettlement: false, removed: false,
+        ocr: { unitPrice: null, lineAmount: 16000, derivedUnitPrice: 8000 }, issues: ['MISSING_PRICE'], warnings: [] }
+    ] } };
+}
+
+test('review shows an opt-in calculated price with its basis without filling the price', () => {
+  const html = renderToStaticMarkup(<OcrDraftEditor token="token" roomId={1} job={reviewJob()}
+    members={[]} onSaved={() => {}} onApplied={async () => {}} />);
+  assert.match(html, /계산 단가 후보/);
+  assert.match(html, /8,000원/);
+  assert.match(html, /16,000원 ÷ 2개/);
+  assert.match(html, /이 값 사용/);
+  assert.match(html, /aria-label="1번 단가"[^>]*value=""/);
+});
 
 test('retry control exposes remaining attempts and cannot retry exhausted photos', () => {
   const job = reviewJob();
@@ -401,6 +390,22 @@ test('retry control exposes remaining attempts and cannot retry exhausted photos
   assert.match(render(), /3회.*사용/);
 });
 
+import './ocrPolling.test';
+
+test('calculated price follows edited quantity and rejects rounding, invalid amounts and already entered prices', async () => {
+  const { calculatedUnitPrice } = await import('../src/ocrReview');
+  const original = reviewJob().draft.items[0];
+  const line = { ...original };
+  assert.equal(calculatedUnitPrice(line, original), 8000);
+  assert.equal(calculatedUnitPrice({ ...line, quantity: 4 }, original), 4000);
+  for(const quantity of [0, -1, 3, 1.5, 1000, null])
+    assert.equal(calculatedUnitPrice({ ...line, quantity }, original), null);
+  assert.equal(calculatedUnitPrice({ ...line, price: 7000 }, original), null);
+  assert.equal(calculatedUnitPrice({ ...line, removed: true }, original), null);
+  assert.equal(calculatedUnitPrice(line, { ...original, ocr: { unitPrice: 8000, lineAmount: 16000 } }), null);
+  assert.equal(calculatedUnitPrice(line, { ...original, ocr: { unitPrice: null, lineAmount: 3000000 } }), null);
+  assert.equal(calculatedUnitPrice(line, undefined), null);
+});
 
 test('retry eligibility protects unsaved edits, other viewers, completed drafts and successful images', async () => {
   const { imageRetryAvailable } = await import('../src/ocrReview');
@@ -414,4 +419,17 @@ test('retry eligibility protects unsaved edits, other viewers, completed drafts 
   assert.equal(imageRetryAvailable(job,41,true,false),false);
   job.images[0].retryable=true;job.images[0].status='SUCCEEDED';
   assert.equal(imageRetryAvailable(job,41,true,false),false);
+});
+
+test('Retry-After HTTP dates are exposed as remaining milliseconds', async t => {
+  t.mock.timers.enable({apis:['Date'],now:Date.parse('2026-10-12T12:00:00Z')});
+  t.mock.method(globalThis,'fetch',async()=>new Response('',{status:429,headers:{'Retry-After':'Mon, 12 Oct 2026 12:00:20 GMT'}}));
+  await assert.rejects(getReceiptOcr('token',1,7,1),e=>{assert.equal(e.retryAfterMs,20000);return true;});
+});
+
+test('network failure while reading an HTTP 200 body remains retryable', async t => {
+  t.mock.method(globalThis,'fetch',async()=>new Response(new ReadableStream({
+    start(controller){controller.error(new TypeError('connection lost while reading body'));}
+  }),{status:200}));
+  await assert.rejects(getReceiptOcr('token',1,7,1),TypeError);
 });

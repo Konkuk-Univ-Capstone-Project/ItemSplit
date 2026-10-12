@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react';
 import { applyReceiptOcrDraft, getReceiptOcr, retryReceiptOcrImage, saveReceiptOcrDraft } from './api';
-import { imageRetryAvailable } from './ocrReview';
+import { calculatedUnitPrice, imageRetryAvailable } from './ocrReview';
 import type { OcrDraftWrite, ReceiptOcrJob, RoomMember } from './types';
 
 const messages: Record<string, string> = {
@@ -63,6 +63,8 @@ export function OcrDraftEditor({ token, roomId, job, members, onSaved, onApplied
     <p>품목과 금액을 수정하고 함께 부담할 참여자를 선택하세요. 삭제 표시는 반영할 품목에서 빼고, 정산 제외는 품목을 남긴 채 부담 계산에서 뺍니다.</p>
     <fieldset className="receipt-fieldset" disabled={busy}>
       {lines.map((line, index) => {
+        const original = job.draft.items.find(item => item.draftItemId === line.draftItemId);
+        const candidate = calculatedUnitPrice(line, original);
         return <div className="ocr-edit-row" key={line.draftItemId ?? `new-${index}`}>
         {onSelectSource && job.draft.items.find(item => item.draftItemId === line.draftItemId)?.imageId != null &&
           <button type="button" className="source-photo-link" onClick={() => {
@@ -80,6 +82,12 @@ export function OcrDraftEditor({ token, roomId, job, members, onSaved, onApplied
             <label>수량<input aria-label={`${index + 1}번 수량`} type="number" min="1" max="999" step="1" value={line.quantity ?? ''}
               onChange={e => change(index, { quantity: e.target.value === '' ? null : Number(e.target.value) })} /></label>
           </div>
+          {candidate !== null && <div className="calculated-price">
+            <p>계산 단가 후보 <strong>{candidate.toLocaleString('ko-KR')}원</strong> (추정)
+              {' — '}{original!.ocr.lineAmount!.toLocaleString('ko-KR')}원 ÷ {line.quantity}개</p>
+            <button className="button secondary" type="button" onClick={() => change(index, { price: candidate })}>이 값 사용</button>
+            <small>직접 인식한 단가가 아닙니다. 원본의 수량과 할인 내역을 확인해주세요.</small>
+          </div>}
           {!dirty && job.draft.items.find(i => i.draftItemId === line.draftItemId)?.issues.map(issue =>
             <small className="field-error" key={issue}>{errors[issue] ?? '입력 확인 필요'}</small>)}
           <label className="checkbox-label"><input type="checkbox" checked={line.excludedFromSettlement}
