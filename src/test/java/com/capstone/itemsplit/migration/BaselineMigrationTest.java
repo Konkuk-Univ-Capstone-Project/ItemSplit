@@ -22,9 +22,9 @@ class BaselineMigrationTest {
 
     @Test void createsTheWholeSchemaOnce() throws Exception {
         var flyway=flyway();
-        assertThat(flyway.migrate().migrationsExecuted).isEqualTo(2);
+        assertThat(flyway.migrate().migrationsExecuted).isEqualTo(1);
         assertThat(flyway.migrate().migrationsExecuted).isZero();
-        assertThat(values("SELECT version FROM flyway_schema_history WHERE success")).containsExactly("1","2");
+        assertThat(values("SELECT version FROM flyway_schema_history WHERE success")).containsExactly("1");
         assertThat(values("SELECT table_name FROM information_schema.tables WHERE table_schema='public' AND table_name <> 'flyway_schema_history'"))
             .containsExactlyInAnyOrder("users","rooms","room_members","room_invite_tokens","room_share_tokens",
                 "receipts","items","assignments","receipt_images","ocr_jobs","ocr_job_images","ocr_drafts","ocr_draft_items","ocr_draft_item_members");

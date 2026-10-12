@@ -11,7 +11,7 @@ import static org.assertj.core.api.Assertions.*;
 class OcrMigrationTest {
     @Container static final PostgreSQLContainer<?> postgres=new PostgreSQLContainer<>("postgres:16-alpine");
     @Test void baselineCreatesOcrRelationshipsAndCleansChildrenOnDeletion() throws Exception {
-        var flyway=Flyway.configure().dataSource(postgres.getJdbcUrl(),postgres.getUsername(),postgres.getPassword()).target("1").load();
+        var flyway=Flyway.configure().dataSource(postgres.getJdbcUrl(),postgres.getUsername(),postgres.getPassword()).load();
         assertThat(flyway.migrate().migrationsExecuted).isEqualTo(1);
         assertThat(flyway.migrate().migrationsExecuted).isZero();
         try(var connection=connection();var sql=connection.createStatement()) {
@@ -31,9 +31,7 @@ class OcrMigrationTest {
                 INSERT INTO ocr_draft_items(draft_id,image_id,row_index,sort_order) SELECT 1,id,1,1 FROM receipt_images WHERE receipt_id=1;
 
                 """);
-            var upgraded=Flyway.configure().dataSource(postgres.getJdbcUrl(),postgres.getUsername(),postgres.getPassword()).load();
-            assertThat(upgraded.migrate().migrationsExecuted).isEqualTo(1);
-            assertThat(upgraded.migrate().migrationsExecuted).isZero();
+            assertThat(flyway.migrate().migrationsExecuted).isZero();
             sql.execute("""
                 INSERT INTO room_members(id,room_id,user_id,display_name) VALUES(1,1,1,'test');
                 INSERT INTO ocr_draft_item_members(draft_item_id,member_id) SELECT id,1 FROM ocr_draft_items;
