@@ -12,8 +12,9 @@ class OcrMigrationTest {
     @Container static final PostgreSQLContainer<?> postgres=new PostgreSQLContainer<>("postgres:16-alpine");
     @Test void baselineCreatesOcrRelationshipsAndCleansChildrenOnDeletion() throws Exception {
         var flyway=Flyway.configure().dataSource(postgres.getJdbcUrl(),postgres.getUsername(),postgres.getPassword()).load();
-        assertThat(flyway.migrate().migrationsExecuted).isEqualTo(1);
-        assertThat(flyway.migrate().migrationsExecuted).isZero();
+        var baseline=Flyway.configure().dataSource(postgres.getJdbcUrl(),postgres.getUsername(),postgres.getPassword())
+            .target("1").load();
+        assertThat(baseline.migrate().migrationsExecuted).isEqualTo(1);
         try(var connection=connection();var sql=connection.createStatement()) {
             sql.execute("""
                 INSERT INTO users(id,email,password,nickname,created_at) VALUES(1,'test@example.com','pw','test',now());
@@ -31,7 +32,15 @@ class OcrMigrationTest {
                 INSERT INTO ocr_draft_items(draft_id,image_id,row_index,sort_order) SELECT 1,id,1,1 FROM receipt_images WHERE receipt_id=1;
 
                 """);
+            assertThat(flyway.migrate().migrationsExecuted).isEqualTo(1);
             assertThat(flyway.migrate().migrationsExecuted).isZero();
+            try (var result=sql.executeQuery("SELECT quota_date, quota_reserved, quota_invoked FROM ocr_job_images")) {
+                assertThat(result.next()).isTrue();
+                assertThat(result.getDate(1)).isNull();
+                assertThat(result.getBoolean(2)).isFalse();
+                assertThat(result.getBoolean(3)).isFalse();
+            }
+            sql.execute("INSERT INTO ocr_daily_usage(quota_key,used_count) VALUES ('USER:1:2026-10-12',1)");
             sql.execute("""
                 INSERT INTO room_members(id,room_id,user_id,display_name) VALUES(1,1,1,'test');
                 INSERT INTO ocr_draft_item_members(draft_item_id,member_id) SELECT id,1 FROM ocr_draft_items;
@@ -42,6 +51,10 @@ class OcrMigrationTest {
             sql.execute("DELETE FROM items; DELETE FROM receipt_images WHERE receipt_id=1; DELETE FROM receipts WHERE id=1;");
             for(String table:java.util.List.of("receipt_images","ocr_jobs","ocr_job_images","ocr_drafts","ocr_draft_items","ocr_draft_item_members")) {
                 try(var result=sql.executeQuery("SELECT count(*) FROM "+table)) {result.next();assertThat(result.getInt(1)).as(table).isZero();}
+            }
+            try(var result=sql.executeQuery("SELECT used_count FROM ocr_daily_usage WHERE quota_key='USER:1:2026-10-12'")) {
+                assertThat(result.next()).isTrue();
+                assertThat(result.getInt(1)).isEqualTo(1);
             }
         }
     }

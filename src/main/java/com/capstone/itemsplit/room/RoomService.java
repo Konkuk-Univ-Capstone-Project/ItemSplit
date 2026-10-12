@@ -36,6 +36,7 @@ public class RoomService {
 	private final UserService userService;
 	private final InviteTokenGenerator inviteTokenGenerator;
 	private final RoomAuthorizationService roomAuthorizationService;
+	private final com.capstone.itemsplit.ocr.OcrQuotaService ocrQuotas;
 
 	@Transactional
 	public CreateRoomResult createRoom(Long ownerId, String roomName) {
@@ -69,6 +70,7 @@ public class RoomService {
 			.map(Receipt::getId)
 			.toList();
 		if (!receiptIds.isEmpty()) {
+			ocrQuotas.releaseUncalledForReceipts(receiptIds);
 			receiptImageRepository.findAllByReceiptIdIn(receiptIds)
 				.forEach(image -> storageCleanupService.deleteAfterCommit(image.getStoredPath()));
 			receiptImageRepository.deleteAllByReceiptIdIn(receiptIds);

@@ -37,6 +37,7 @@ public class ReceiptService {
     private final UserRepository userRepository;
     private final StorageCleanupService storageCleanupService;
     private final ObjectMapper objectMapper;
+    private final com.capstone.itemsplit.ocr.OcrQuotaService ocrQuotas;
 
     @Transactional
     public ReceiptDetailResult createManualReceipt(Long roomId, Long userId, String requestId,
@@ -155,6 +156,7 @@ public class ReceiptService {
     public void deleteReceipt(Long roomId, Long receiptId, Long userId) {
         roomAuthorizationService.checkMemberForUpdate(roomId, userId);
         Receipt receipt = findReceiptInRoom(roomId, receiptId);
+        ocrQuotas.releaseUncalledForReceipts(List.of(receiptId));
         receiptImageRepository.findAllByReceiptId(receiptId)
             .forEach(image -> storageCleanupService.deleteAfterCommit(image.getStoredPath()));
         receiptImageRepository.deleteAllByReceiptId(receiptId);

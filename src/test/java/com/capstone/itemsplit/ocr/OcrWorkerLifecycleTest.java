@@ -65,13 +65,16 @@ class OcrWorkerLifecycleTest {
     @Test
     void deletingReceiptDuringRecognitionDiscardsTheLateResult() throws Exception {
         Actor actor = actor();
-        var receipt = demo(actor);
+        var receipt = demoService.create(actor.roomId(), actor.userId(), "demo",
+            List.of(FakeOcrScenario.NORMAL, FakeOcrScenario.NORMAL, FakeOcrScenario.NORMAL));
         try (var held = new HeldRecognition()) {
             var started = start(actor, receipt);
             held.awaitEntered();
+            assertThat(userUsage(actor)).isEqualTo(3);
 
             receiptService.deleteReceipt(actor.roomId(), receipt.receiptId(), actor.userId());
             assertThat(jobs.findById(started.jobId())).isEmpty();
+            assertThat(userUsage(actor)).isEqualTo(1);
 
             held.releaseAndDrain();
             assertThat(receipts.findById(receipt.receiptId())).isEmpty();
@@ -80,6 +83,8 @@ class OcrWorkerLifecycleTest {
             assertThat(jobImages.findAllByJobIdOrderBySortOrder(started.jobId())).isEmpty();
             assertThat(drafts.findByJobId(started.jobId())).isEmpty();
             assertThat(draftItems.findAllByDraftIdOrderBySortOrder(started.draft().draftId())).isEmpty();
+            assertThat(userUsage(actor)).isEqualTo(1);
+            verify(engine, times(1)).recognize(any());
         }
     }
 
@@ -164,6 +169,8 @@ class OcrWorkerLifecycleTest {
             });
             assertThat(occupied.await(10, TimeUnit.SECONDS)).isTrue();
             service.retry(actor.roomId(), receipt.receiptId(), started.jobId(), receipt.imageIds().getFirst(), actor.userId());
+            service.retry(actor.roomId(), receipt.receiptId(), started.jobId(), receipt.imageIds().getFirst(), actor.userId());
+            assertThat(userUsage(actor)).isEqualTo(2);
             worker.recoverStuckJobs();
             var queued = service.get(actor.roomId(), receipt.receiptId(), started.jobId(), actor.userId());
             assertThat(queued.images().getFirst().status()).isEqualTo("PENDING");
@@ -200,6 +207,11 @@ class OcrWorkerLifecycleTest {
         Room room = rooms.save(Room.create("OCR lifecycle", user));
         RoomMember member = members.save(RoomMember.create(room, user));
         return new Actor(room.getId(), user.getId(), member.getId());
+    }
+
+    private int userUsage(Actor actor) {
+        return jdbc.queryForObject("SELECT COALESCE(SUM(used_count), 0) FROM ocr_daily_usage WHERE quota_key LIKE ?",
+            Integer.class, "USER:" + actor.userId() + ":%");
     }
 
     private User user() {

@@ -22,6 +22,7 @@ public class OcrService {
     private final OcrJobImageRepository jobImages;
     private final OcrDraftRepository drafts;
     private final OcrViews views;
+    private final OcrQuotaService quotas;
     private final ApplicationEventPublisher events;
     @Value("${app.ocr.provider}") private String provider;
     @Value("${app.ocr.max-attempts:3}") private int maxAttempts;
@@ -39,9 +40,12 @@ public class OcrService {
         }
         var uploaded=images.findAllByReceiptId(receiptId);
         if(uploaded.isEmpty() || uploaded.size()>3) throw invalid("영수증 이미지가 1~3장 필요합니다.");
+        var quotaDate=quotas.reserve(receiptId,userId,uploaded.size());
         OcrJob job=jobs.save(OcrJob.create(receipt,requestId,userId,"fake".equalsIgnoreCase(provider)?"FAKE_CLOVA_RECEIPT":"CLOVA_RECEIPT"));
         drafts.save(OcrDraft.create(job));
-        jobImages.saveAll(uploaded.stream().map(image->OcrJobImage.create(job,image)).toList());
+        jobImages.saveAll(uploaded.stream().map(image->{
+            var row=OcrJobImage.create(job,image);row.reserveQuota(quotaDate);return row;
+        }).toList());
         events.publishEvent(new Requested(job.getId()));
         return views.view(job);
     }
@@ -55,7 +59,8 @@ public class OcrService {
         if(image.getStatus()==OcrJobImage.Status.PENDING || image.getStatus()==OcrJobImage.Status.PROCESSING) return views.view(job);
         if(image.getStatus()!=OcrJobImage.Status.FAILED || !image.isRetryable()) throw conflict("IMAGE_NOT_RETRYABLE","재시도 가능한 실패 이미지가 아닙니다.");
         if(image.getAttemptCount()>=maxAttempts) throw new OcrRequestException(ErrorCode.TOO_MANY_REQUESTS,"OCR_ATTEMPT_LIMIT","이미지 재시도 한도를 초과했습니다.");
-        image.retry();job.status(OcrJob.Status.PROCESSING);
+        var quotaDate=quotas.reserve(receiptId,userId,1);
+        image.retry();image.reserveQuota(quotaDate);job.status(OcrJob.Status.PROCESSING);
         events.publishEvent(new Requested(job.getId()));
         return views.view(job);
     }

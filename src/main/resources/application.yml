@@ -34,6 +34,11 @@ info:
     name: ${spring.application.name}
 
 app:
+  ocr:
+    max-attempts: 3
+    limit:
+      per-receipt-daily: ${OCR_PER_RECEIPT_DAILY_LIMIT:15}
+      per-user-daily: ${OCR_PER_USER_DAILY_LIMIT:60}
   jwt:
     secret: ${JWT_SECRET:change-me-to-a-long-random-secret-for-itemsplit}
     access-token-expiration: ${JWT_ACCESS_TOKEN_EXPIRATION:86400000}
