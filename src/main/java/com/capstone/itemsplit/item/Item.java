@@ -30,6 +30,17 @@ public class Item {
     @Column(nullable = false)
     private boolean excludedFromSettlement;
 
+    @Column(unique=true)
+    private Long ocrDraftItemId;
+
+    public void recordOcrSource(Long draftItemId) { this.ocrDraftItemId=draftItemId; }
+
+    public void requireOcrEditor(Long userId) {
+        if (ocrDraftItemId != null && (receipt.getCreatedBy() == null || !receipt.getCreatedBy().getId().equals(userId)))
+            throw new com.capstone.itemsplit.common.exception.ApiException(
+                com.capstone.itemsplit.common.exception.ErrorCode.FORBIDDEN,"OCR 품목은 영수증 작성자만 수정·삭제할 수 있습니다.");
+    }
+
     public void setExcludedFromSettlement(boolean excludedFromSettlement) {
         this.excludedFromSettlement = excludedFromSettlement;
     }

@@ -88,6 +88,11 @@ public class ReceiptService {
         Receipt receipt = findReceiptInRoom(roomId, receiptId);
         MoneyPolicy.declaredTotal(declaredTotal);
         RoomMember payer = resolvePayer(roomId, payerMemberId);
+        for (Item item : itemRepository.findAllByReceiptId(receiptId)) {
+            var command=commands.stream().filter(c->item.getId().equals(c.itemId())).findFirst().orElse(null);
+            if(command==null || !item.getName().equals(command.name().trim()) || item.getPrice()!=command.price() || item.getQuantity()!=command.quantity())
+                item.requireOcrEditor(userId);
+        }
         validateCommands(roomId, receiptId, commands);
         receipt.update(name.trim(), payer, declaredTotal, purchasedAt);
         replaceItems(roomId, receipt, commands);

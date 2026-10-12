@@ -37,6 +37,7 @@ public class SettlementService {
     private final ReceiptRepository receiptRepository;
     private final ItemRepository itemRepository;
     private final AssignmentRepository assignmentRepository;
+    private final com.capstone.itemsplit.ocr.OcrDraftRepository ocrDraftRepository;
 
     public SettlementResult calculate(Long roomId, Long userId) {
         return calculateAuthorized(roomAuthorizationService.checkMember(roomId, userId));
@@ -111,9 +112,11 @@ public class SettlementService {
                 issues.add(new SettlementIssue("EMPTY_RECEIPT", receiptId, null, "영수증에 품목을 입력해 주세요."));
             }
             Long declaredTotal = receipt.getDeclaredTotal();
-            if (declaredTotal == null) {
+            boolean appliedOcr=receipt.getSourceType()==com.capstone.itemsplit.receipt.ReceiptSourceType.IMAGE_UPLOAD
+                && ocrDraftRepository.existsByReceiptIdAndStatus(receiptId,"APPLIED");
+            if (!appliedOcr && declaredTotal == null) {
                 issues.add(new SettlementIssue("MISSING_DECLARED_TOTAL", receiptId, null, "영수증 총액을 입력·확정해 주세요."));
-            } else if (declaredTotal < 1 || declaredTotal > MoneyPolicy.RECEIPT_MAX) {
+            } else if (!appliedOcr && declaredTotal != null && (declaredTotal < 1 || declaredTotal > MoneyPolicy.RECEIPT_MAX)) {
                 issues.add(new SettlementIssue("INVALID_DECLARED_TOTAL", receiptId, null, "영수증 총액은 1원부터 1,000만 원까지 입력할 수 있습니다."));
             }
             long receiptTotal = 0;
@@ -166,7 +169,7 @@ public class SettlementService {
                     issues.add(new SettlementIssue("INVALID_PAYER", receiptId, null, "결제자를 해당 방의 멤버로 지정해 주세요."));
                 }
             }
-            if (validAmounts && !receiptLimitReported && declaredTotal != null
+            if (!appliedOcr && validAmounts && !receiptLimitReported && declaredTotal != null
                 && declaredTotal >= 1 && declaredTotal <= MoneyPolicy.RECEIPT_MAX && declaredTotal != receiptTotal) {
                 issues.add(new SettlementIssue("TOTAL_MISMATCH", receiptId, null,
                     "영수증 총액과 전체 품목 합계가 " + Math.abs(declaredTotal - receiptTotal) + "원 다릅니다. 제외 품목도 합계에 포함됩니다."));

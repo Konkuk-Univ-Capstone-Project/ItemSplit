@@ -49,6 +49,7 @@ public class OcrService {
         authorization.checkMemberForUpdate(roomId,userId);
         owner(receipt(roomId,receiptId),userId);
         OcrJob job=job(receiptId,jobId);
+        if(!drafts.findByJobId(jobId).orElseThrow().getStatus().equals("EDITING")) throw conflict("DRAFT_NOT_EDITABLE","이미 정산에 반영한 초안입니다.");
         OcrJobImage image=jobImages.findAllByJobIdOrderBySortOrder(jobId).stream()
             .filter(i->i.getImage().getId().equals(imageId)).findFirst().orElseThrow(()->new ApiException(ErrorCode.NOT_FOUND));
         if(image.getStatus()==OcrJobImage.Status.PENDING || image.getStatus()==OcrJobImage.Status.PROCESSING) return views.view(job);

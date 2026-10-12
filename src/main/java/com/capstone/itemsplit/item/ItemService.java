@@ -54,6 +54,7 @@ public class ItemService {
 	) {
 		roomAuthorizationService.checkMemberForUpdate(roomId, userId);
 		Item item = findItemInReceipt(roomId, receiptId, itemId);
+        item.requireOcrEditor(userId);
 		long otherTotal = amountValidator.total(itemRepository.findAllByReceiptId(receiptId).stream()
             .filter(existing -> !existing.getId().equals(itemId)).toList());
         long total = MoneyPolicy.addWithin(otherTotal, MoneyPolicy.itemTotal(price, quantity), MoneyPolicy.RECEIPT_MAX,
@@ -66,7 +67,7 @@ public class ItemService {
 	@Transactional
 	public void deleteItem(Long roomId, Long receiptId, Long itemId, Long userId) {
 		roomAuthorizationService.checkMemberForUpdate(roomId, userId);
-		findItemInReceipt(roomId, receiptId, itemId);
+		findItemInReceipt(roomId, receiptId, itemId).requireOcrEditor(userId);
 		assignmentRepository.deleteAllByItemIdIn(List.of(itemId));
 		itemRepository.deleteById(itemId);
 	}

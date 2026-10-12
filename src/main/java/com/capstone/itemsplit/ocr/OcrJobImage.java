@@ -22,6 +22,8 @@ public class OcrJobImage {
     @Column(length=30) private String errorCode;
     @Column(nullable=false) private boolean retryable;
     @Column(nullable=false) private int attemptCount;
+    @Column(nullable=false) private boolean manuallyCovered;
+    void cover(boolean covered) {manuallyCovered=covered;}
     private Long durationMs;
     private String storeName;
     private java.time.LocalDate purchasedAt;
@@ -35,7 +37,7 @@ public class OcrJobImage {
         row.status=Status.PENDING;row.queuedAt=LocalDateTime.now();return row;
     }
     void start() {status=Status.PROCESSING;attemptCount++;startedAt=LocalDateTime.now();finishedAt=null;errorCode=null;retryable=false;}
-    void retry() {status=Status.PENDING;queuedAt=LocalDateTime.now();errorCode=null;retryable=false;startedAt=null;finishedAt=null;durationMs=null;}
+    void retry() {manuallyCovered=false;status=Status.PENDING;queuedAt=LocalDateTime.now();errorCode=null;retryable=false;startedAt=null;finishedAt=null;durationMs=null;}
     void fail(String code,boolean retryable) {status=Status.FAILED;errorCode=code;this.retryable=retryable;finishedAt=LocalDateTime.now();}
     void succeed(String name,java.time.LocalDate date,Long total,String detail,long duration) {
         storeName=name;purchasedAt=date;totalAmount=total;candidateDetail=detail;durationMs=duration;
