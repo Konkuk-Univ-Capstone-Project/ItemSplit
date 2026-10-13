@@ -9,6 +9,8 @@ import org.springframework.data.repository.query.Param;
 
 public interface ReceiptImageRepository extends JpaRepository<ReceiptImage, Long> {
 
+    java.util.Optional<ReceiptImage> findByStoredPath(String storedPath);
+
     @Query("select i from ReceiptImage i where i.receipt.id = :receiptId order by i.sortOrder asc")
     List<ReceiptImage> findAllByReceiptId(@Param("receiptId") Long receiptId);
 

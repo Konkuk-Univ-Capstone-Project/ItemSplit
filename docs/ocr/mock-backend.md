@@ -1,14 +1,16 @@
 # 실제 저장소·가짜 CLOVA를 사용하는 OCR 백엔드
 
+이 문서는 합성 응답으로 검증하는 `ocr-demo` 실행 안내다. 실제 공급자 연동은 [CLOVA 백엔드 실행 안내](clova-backend.md)를 따른다.
+
 ## 이번 구현 범위
 
 `이미지 업로드 → StorageService(local/S3) 저장·읽기 → 가짜 CLOVA JSON → 실제 파싱 → DB 초안 저장·조회`를 실행한다. PR 23의 저장소 구현체를 사용하며 CLOVA에는 접속하지 않는다. `STORAGE_TYPE=local`이면 AWS 계정 없이 실행할 수 있다. `s3`이면 실제 S3에 이미지 객체를 저장하고 읽는다. 사용자 확인 전 정상 `items`에는 저장하지 않는다.
 
-기존 최종 설계 중 **인식 시작·조회·실패 재시도와 초안 생성**을 구현한 단계다. 실제 CLOVA HTTP 호출, 초안 편집·정상 품목 반영, UI, 수정 요청·품목 이동, 정산 정책 전환은 포함하지 않는다. 기존 `declaredTotal` 정산 규칙은 이 변경으로 바뀌지 않는다. 비용 기반 일일 한도·전용 polling 제한·사진 경계 중복 판정도 실제 서비스 연결 전 별도 구현 대상이다. 현재는 이미지별 최대 3번 시도 및 기존 API 요청 제한을 적용한다.
+기존 최종 설계 중 **인식 시작·조회·실패 재시도와 초안 생성**을 구현한 단계다. 실제 CLOVA HTTP 호출은 별도 `ocr` 프로필로 지원한다. 웹에서는 사진 업로드·인식 시작·실패 사진 재시도·계산 단가 후보 채택·초안 검토·수정·정산 반영까지 지원한다. 상태 조회는 2초→5초 간격과 429·일시 오류 재조회 정책을 적용한다. [저장·반영 API 계약](clova-backend.md#초안-저장반영-계약)을 참고한다. 수기·OCR 영수증 모두 품목 합계로 정산하며 별도 총액 입력은 제공하지 않는다. OCR 인식 총액 후보는 경고에만 사용한다. 수정 요청·품목 이동·서비스 전체 일일 상한·전용 polling 제한·사진 경계 중복 판정은 별도 구현 대상이다. 이미지별 최초 포함 최대 3회와 영수증·사용자 일일 한도 및 기존 API 요청 제한을 적용한다.
 
 ## 실행
 
-PostgreSQL만 준비한 뒤 실행한다. Flyway가 이미지·OCR 테이블까지 포함한 통합 `V1__baseline.sql`을 빈 DB에 적용한다.
+PostgreSQL만 준비한 뒤 실행한다. Flyway가 이미지·OCR 테이블까지 포함한 통합 `V1__baseline.sql`과 일일 한도용 V2를 빈 DB에 적용한다. 통합 V1을 사용 중인 DB에는 V2만 추가 적용한다.
 
 ```sh
 docker compose up -d --wait postgres
@@ -69,7 +71,7 @@ curl http://localhost:8080/api/rooms/ROOM_ID/receipts/RECEIPT_ID/ocr/jobs/latest
 
 상태는 `PENDING → PROCESSING → REVIEWABLE / PARTIALLY_FAILED / FAILED`. 응답은 `jobId`, `receiptId`, `status`, `provider`, 사진별 상태·오류·시도 횟수·후보, `draft`를 제공한다. `FAKE_CLOVA_RECEIPT` 표기로 합성 결과임을 구분한다. 초안은 `EDITING`, 품목마다 원문·변환값·검토 사유를 제공한다. 단가 계산 후보는 `ocr.derivedUnitPrice`에만 표시하며 누락 단가를 자동 채우지 않는다. `itemsTotal`이 JS 안전 정수 범위를 넘으면 `null`과 합계 상한 차단 사유를 반환한다.
 
-이 단계에는 반영 API가 없으므로 `applicable` 필드도 제공하지 않는다. 초안의 `blockers`는 현재 인식 결과의 검토 사유이며 기존 정산 결과의 `issues`와 별개다. 총액 불일치는 초안의 `OCR_TOTAL_MISMATCH` 경고다.
+`applicable` 대신 초안 `status`와 `blockers`를 확인한다. `EDITING` 상태이고 `blockers`가 비어 있을 때 저장된 revision에 대한 최종 검토 확인 후 반영을 요청할 수 있다. 초안의 `blockers`는 기존 정산 결과의 `issues`와 별개다. 총액 불일치는 초안의 `OCR_TOTAL_MISMATCH` 경고다. `itemsTotal`은 삭제하지 않은 초안 행 중 단가·수량이 있는 행의 합계이며 정산 제외 품목도 포함한다. 제외 선택만으로는 불일치가 생기지 않고 삭제한 행은 합계에서 빠진다. OCR의 품목 누락·오인식, 수량·가격·할인 인식 오류 또는 사용자의 초안 추가·수정·삭제로 총액 후보와 차이가 생길 수 있다. `OCR_TOTAL_MISMATCH`는 확인을 돕는 경고이며 반영·정산을 차단하지 않는다.
 
 ### 4. 실패 사진 재시도
 
@@ -78,9 +80,19 @@ curl -X POST http://localhost:8080/api/rooms/ROOM_ID/receipts/RECEIPT_ID/ocr/job
   -H 'Authorization: Bearer TOKEN'
 ```
 
-HTTP 202. 성공 사진은 재실행하지 않는다. 중복 클릭으로 이미 대기/처리 중이면 현재 작업을 반환한다. 재시도 불가능한 오류는 409, 이미지별 3회 소진 후에는 429 `OCR_ATTEMPT_LIMIT`. 개발용 상한은 `app.ocr.max-attempts`로 설정한다. TIMEOUT 등 합성 실패는 재시도해도 의도적으로 같은 실패를 반환한다.
+HTTP 202. 성공 사진은 재실행하지 않는다. 중복 클릭으로 이미 대기/처리 중이면 현재 작업을 반환한다. 재시도 불가능한 오류는 409, 이미지별 최초 1회 + 재시도 최대 2회, 총 3회 소진 후에는 429 `OCR_ATTEMPT_LIMIT`. 개발용 상한은 `app.ocr.max-attempts`로 설정한다. TIMEOUT 등 합성 실패는 재시도해도 의도적으로 같은 실패를 반환한다.
 
 서버 재시작 또는 3분 이상 중단된 작업은 `INTERRUPTED`로 정리한다. 인식 중 영수증·방이 삭제되면 결과를 버리고, 생성자가 방에서 제거되면 `ACCESS_REVOKED`로 저장을 거부한다. 오래된 시도의 응답이 재시도 결과를 덮어쓰지 않도록 시도 번호를 검사한다. 이 실행기는 최종 설계와 같이 **단일 서버 인스턴스** 전제다.
+
+## 호출 한도
+
+설정은 `app.ocr.limit.per-receipt-daily`(환경변수 `OCR_PER_RECEIPT_DAILY_LIMIT`, 기본 15), `app.ocr.limit.per-user-daily`(`OCR_PER_USER_DAILY_LIMIT`, 기본 60)다.
+
+사진 한 장의 최초 시도와 재시도를 합쳐 최대 3회(최초 1회 + 재시도 최대 2회)이며 날짜가 바뀌어도 초기화하지 않는다. 재시도 가능한 오류로 실패한 사진만 다시 호출하고 성공한 사진은 재호출하지 않는다. 일일 한도는 공급자에 보내는 사진당 1회로 계산해 영수증당 15회, 요청 사용자당 60회이며 한국 시간(`Asia/Seoul`) 자정에 새 날짜로 집계한다. 같은 시작 요청이나 이미 대기·처리 중인 재시도 요청의 중복 전송에는 추가 차감하지 않는다.
+
+여러 사진의 필요 횟수를 DB에서 한 번에 예약하고 부족하면 전체 요청을 HTTP 429로 거부한다. 사유는 `OCR_RECEIPT_DAILY_LIMIT` 또는 `OCR_USER_DAILY_LIMIT`이다. 공급자를 호출하기 전에 실패한 사진은 최초 예약 날짜의 횟수를 반환하며, 공급자 호출 후 실패(공급자가 반환한 `UNSUPPORTED_INPUT` 포함)는 사용량에 남는다. 호출 직전 전달 상태를 기록한 이후의 서버 중단도 보수적으로 사용량에 포함한다. DB 사용량은 영수증·작업 삭제나 서버 재시작으로 초기화되지 않는다.
+
+현재 영수증당 최대 3장 × 사진당 최대 3회이므로 한 영수증에서 도달 가능한 누적 시도는 최대 9회다. 일일 15회는 추가 안전장치이며 기본 흐름에서는 도달하지 않는다. 영수증 일일 한도 테스트는 설정값을 낮추거나 사용량 예약 계층을 직접 검증한다. 서비스 전체 일일 상한과 별도 상태 조회 제한은 설계 범위로 남아 있다.
 
 ## 팀원 연결 규약
 
@@ -116,9 +128,9 @@ STORAGE_TYPE=s3 S3_BUCKET=your-dev-bucket AWS_REGION=ap-northeast-2 \
 
 ### CLOVA 담당
 
-`ocr.engine.ClovaTransport`의 `String recognize(OcrImageInput)`을 실제 HTTP 요청으로 구현한다. `ClovaReceiptOcrEngine(realTransport, ClovaReceiptParser)`를 `ReceiptOcrEngine` Bean으로 등록하면 공통 파서·상태 관리·DB 저장을 재사용한다. 실제 CLOVA를 연결할 때는 `ocr-demo` 프로필과 가짜 공급자를 끈다. HTTP timeout/429/auth 오류는 `OcrEngineException`으로 변환하고 API 키·전체 응답을 로그에 남기지 않는다. 공급자 호출 동안 DB 트랜잭션은 열려 있지 않다.
+`HttpClovaTransport`가 `ClovaTransport`를 구현하고 `OcrConfiguration`이 실제 엔진을 등록한다. 공통 파서·상태 관리·DB 저장을 재사용하며 HTTP timeout/429/auth 오류는 `OcrEngineException`으로 변환한다. 공급자 호출 동안 DB 트랜잭션은 열려 있지 않다.
 
-`app.ocr.provider=clova`라는 설정만으로 실제 호출이 생기지는 않는다. 실제 Bean 등록과 URL/Secret 설정 검증이 필요하다. 실제 연결 시 `ocr-demo`를 끄고 `app.ocr.enabled=true` 및 실제 구현체 설정을 사용한다. 테스트용 합성 영수증은 실제 이미지로 오인하지 않도록 새 실제 업로드 데이터로 검증한다.
+실제 연결 시 `ocr-demo`를 끄고 `ocr` 프로필을 사용한다. URL/Secret은 시작 시 검증한다. 데모 API로 생성한 영수증과 이전 가짜 OCR 결과를 실제 인식 결과로 사용하지 말고, 새 영수증 이미지를 업로드해 검증한다.
 
 ## 검증
 

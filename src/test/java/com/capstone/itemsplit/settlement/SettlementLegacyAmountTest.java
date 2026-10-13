@@ -49,7 +49,7 @@ class SettlementLegacyAmountTest {
     @ParameterizedTest
     @CsvSource({"0,1,1", "-1,1,1", "1000001,1,1000001", "1,0,1", "1,1000,1000", "1000000,11,10000000", "2147483647,2147483647,1", "9223372036854775807,999,1"})
     void legacyInvalidItemCannotProduceSettlement(long price, int quantity, int total) {
-        Receipt receipt = Receipt.createManual(room, "receipt", member, (long) total, null);
+        Receipt receipt = Receipt.createManual(room, "receipt", member, null);
         ReflectionTestUtils.setField(receipt, "id", 3L);
         Item item = Item.create(receipt, "item", price, quantity);
         ReflectionTestUtils.setField(item, "id", 4L);
@@ -59,22 +59,44 @@ class SettlementLegacyAmountTest {
         assertThat(service.calculate(1L, 1L).members()).isEmpty();
     }
 
-    @ParameterizedTest
-    @CsvSource({"0", "-1", "10000001"})
-    void legacyInvalidDeclaredTotalCannotProduceSettlement(int declaredTotal) {
-        Receipt receipt = Receipt.createManual(room, "receipt", member, (long) declaredTotal, null);
+    @Test
+    void imageReceiptWithAssignedItemsNeedsNoSeparateTotalOrAppliedOcrDraft() {
+        Receipt receipt = Receipt.createImageUpload(room, "receipt", member.getUser(), member);
         ReflectionTestUtils.setField(receipt, "id", 3L);
-        Item item = Item.create(receipt, "item", 1, 1);
+        Item item = Item.create(receipt, "item", 1000, 2);
         ReflectionTestUtils.setField(item, "id", 4L);
         when(receipts.findAllByRoomId(1L)).thenReturn(List.of(receipt));
         when(items.findAllByReceiptIdIn(any())).thenReturn(List.of(item));
         when(assignments.findAllByItemIdInWithUser(any())).thenReturn(List.of(Assignment.create(item, member)));
-        assertThat(service.calculate(1L, 1L).members()).isEmpty();
+        var result = service.calculate(1L, 1L);
+        assertThat(result.ready()).isTrue();
+        assertThat(result.members().getFirst().paid()).isEqualTo(2000);
+    }
+
+    @Test
+    void manualReceiptWithoutDeclaredTotalSettlesUsingCurrentItemSum() {
+        Receipt receipt = Receipt.createManual(room, "팀회식", member, null);
+        ReflectionTestUtils.setField(receipt, "id", 3L);
+        Item pasta = Item.create(receipt, "파스타", 15000, 1);
+        Item pizza = Item.create(receipt, "피자", 22000, 1);
+        ReflectionTestUtils.setField(pasta, "id", 4L);
+        ReflectionTestUtils.setField(pizza, "id", 5L);
+        when(receipts.findAllByRoomId(1L)).thenReturn(List.of(receipt));
+        when(items.findAllByReceiptIdIn(any())).thenReturn(List.of(pasta, pizza));
+        when(assignments.findAllByItemIdInWithUser(any())).thenReturn(List.of(
+            Assignment.create(pasta, member), Assignment.create(pizza, member)));
+        var result = service.calculate(1L, 1L);
+        assertThat(result.ready()).isTrue();
+        assertThat(result.members().getFirst().paid()).isEqualTo(37000);
+        assertThat(result.members().getFirst().burden()).isEqualTo(37000);
+        pizza.update("피자", 22000, 2);
+        assertThat(service.calculate(1L, 1L).members().getFirst().paid()).isEqualTo(59000);
+        assertThat(service.calculate(1L, 1L).issues()).isEmpty();
     }
 
     @Test
     void legacyReceiptAboveTotalCapCannotProduceSettlement() {
-        Receipt receipt = Receipt.createManual(room, "receipt", member, 10000000L, null);
+        Receipt receipt = Receipt.createManual(room, "receipt", member, null);
         ReflectionTestUtils.setField(receipt, "id", 3L);
         Item first = Item.create(receipt, "first", 1000000, 10);
         Item second = Item.create(receipt, "second", 1, 1);
@@ -92,7 +114,7 @@ class SettlementLegacyAmountTest {
         List<Item> savedItems = new ArrayList<>();
         List<Assignment> savedAssignments = new ArrayList<>();
         for (long id = 1; id <= 11; id++) {
-            Receipt receipt = Receipt.createManual(room, "receipt", member, 10000000L, null);
+            Receipt receipt = Receipt.createManual(room, "receipt", member, null);
             ReflectionTestUtils.setField(receipt, "id", id);
             Item item = Item.create(receipt, "item", 1000000, 10);
             ReflectionTestUtils.setField(item, "id", id);

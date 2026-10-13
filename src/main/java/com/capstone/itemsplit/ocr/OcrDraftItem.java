@@ -16,7 +16,7 @@ public class OcrDraftItem {
     @Id @GeneratedValue(strategy=GenerationType.IDENTITY) private Long id;
     @ManyToOne(fetch=FetchType.LAZY) @JoinColumn(name="draft_id",nullable=false)
     @OnDelete(action=OnDeleteAction.CASCADE) private OcrDraft draft;
-    @ManyToOne(fetch=FetchType.LAZY) @JoinColumn(name="image_id",nullable=false)
+    @ManyToOne(fetch=FetchType.LAZY) @JoinColumn(name="image_id")
     @OnDelete(action=OnDeleteAction.CASCADE) private ReceiptImage image;
     @Column(nullable=false) private int rowIndex;
     @Column(nullable=false) private int sortOrder;
@@ -37,6 +37,18 @@ public class OcrDraftItem {
         item.ocrQuantity=value(line.quantity());item.ocrUnitPrice=value(line.unitPrice());item.ocrLineAmount=value(line.lineAmount());
         item.ocrFlags=String.join(",",new java.util.TreeSet<>(line.flags()));item.ocrDetail=detail;
         item.name=item.ocrName;item.price=item.ocrUnitPrice;item.quantity=item.ocrQuantity;return item;
+    }
+    @ElementCollection
+    @CollectionTable(name="ocr_draft_item_members",joinColumns=@JoinColumn(name="draft_item_id"))
+    @Column(name="member_id",nullable=false)
+    private java.util.Set<Long> memberIds=new java.util.HashSet<>();
+    static OcrDraftItem manual(OcrDraft draft) {
+        OcrDraftItem item=new OcrDraftItem();item.draft=draft;return item;
+    }
+    void edit(String name,Long price,Integer quantity,java.util.Set<Long> memberIds,boolean excluded,boolean removed,int order) {
+        this.name=name==null?null:name.trim();this.price=price;this.quantity=quantity;
+        this.memberIds.clear();this.memberIds.addAll(memberIds);
+        this.excludedFromSettlement=excluded;this.removed=removed;this.sortOrder=order;
     }
     private static <T>T value(OcrField<T> field) {return field==null?null:field.value();}
 }

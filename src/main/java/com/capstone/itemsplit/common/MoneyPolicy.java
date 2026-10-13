@@ -19,12 +19,6 @@ public final class MoneyPolicy {
         return total;
     }
 
-    public static void declaredTotal(Long total) {
-        if (total != null && (total < 1 || total > RECEIPT_MAX)) {
-            throw invalid("입력 총액은 1~10,000,000원이어야 합니다.");
-        }
-    }
-
     public static long addWithin(long current, long addition, long max, String message) {
         if (addition < 0 || current < 0 || current > max || addition > max - current) throw invalid(message);
         return current + addition;

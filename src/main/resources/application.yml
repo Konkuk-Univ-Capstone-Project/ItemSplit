@@ -34,6 +34,11 @@ info:
     name: ${spring.application.name}
 
 app:
+  ocr:
+    max-attempts: 3
+    limit:
+      per-receipt-daily: ${OCR_PER_RECEIPT_DAILY_LIMIT:15}
+      per-user-daily: ${OCR_PER_USER_DAILY_LIMIT:60}
   jwt:
     secret: ${JWT_SECRET:change-me-to-a-long-random-secret-for-itemsplit}
     access-token-expiration: ${JWT_ACCESS_TOKEN_EXPIRATION:86400000}
@@ -42,6 +47,7 @@ app:
     cleanup-queue-path: ${STORAGE_CLEANUP_QUEUE:${app.storage.local.root-path}/.cleanup-pending}
     local:
       root-path: ${LOCAL_STORAGE_ROOT:./storage}
+      signing-secret: ${LOCAL_STORAGE_SIGNING_SECRET:}
     s3:
       bucket: ${S3_BUCKET:}
       region: ${AWS_REGION:ap-northeast-2}

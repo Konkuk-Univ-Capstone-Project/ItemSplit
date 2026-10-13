@@ -188,7 +188,7 @@ class ReceiptImageUploadTest {
 	@Test
 	@DisplayName("수기로 만든 영수증에는 이미지를 추가할 수 없다")
 	void 수기_영수증에는_이미지를_추가할_수_없다() throws Exception {
-		Receipt manual = receiptRepository.save(Receipt.createManual(room, "Manual", null, null, null));
+		Receipt manual = receiptRepository.save(Receipt.createManual(room, "Manual", null, null));
 
 		addImage(uploader, manual.getId(), image("receipt.png", PNG))
 			.andExpect(status().isBadRequest())

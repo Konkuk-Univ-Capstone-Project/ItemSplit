@@ -16,6 +16,7 @@ import org.springframework.web.bind.annotation.*;
 @ConditionalOnProperty(name="app.ocr.enabled",havingValue="true")
 public class OcrController {
     private final OcrService service;
+    private final OcrDraftService draftService;
     @PostMapping
     ResponseEntity<ApiResponse<OcrViews.JobView>> start(@PathVariable Long roomId,@PathVariable Long receiptId,
         @AuthenticationPrincipal AuthenticatedUser user,@Valid @RequestBody StartRequest request) {
@@ -33,6 +34,16 @@ public class OcrController {
     ResponseEntity<ApiResponse<OcrViews.JobView>> retry(@PathVariable Long roomId,@PathVariable Long receiptId,@PathVariable Long jobId,
         @PathVariable Long imageId,@AuthenticationPrincipal AuthenticatedUser user) {
         return ResponseEntity.accepted().body(ApiResponse.success(service.retry(roomId,receiptId,jobId,imageId,userId(user))));
+    }
+    @PutMapping("/{jobId}/draft")
+    ApiResponse<OcrViews.JobView> saveDraft(@PathVariable Long roomId,@PathVariable Long receiptId,@PathVariable Long jobId,
+        @AuthenticationPrincipal AuthenticatedUser user,@Valid @RequestBody OcrDraftService.SaveRequest request) {
+        return ApiResponse.success(draftService.save(roomId,receiptId,jobId,userId(user),request));
+    }
+    @PostMapping("/{jobId}/draft/apply")
+    ApiResponse<com.capstone.itemsplit.receipt.ReceiptService.ReceiptDetailResult> applyDraft(@PathVariable Long roomId,@PathVariable Long receiptId,@PathVariable Long jobId,
+        @AuthenticationPrincipal AuthenticatedUser user,@Valid @RequestBody OcrDraftService.ApplyRequest request) {
+        return ApiResponse.success(draftService.apply(roomId,receiptId,jobId,userId(user),request));
     }
     static Long userId(AuthenticatedUser user) {if(user==null)throw new ApiException(ErrorCode.UNAUTHORIZED);return user.id();}
     public record StartRequest(@NotBlank @Size(max=64) String requestId){}

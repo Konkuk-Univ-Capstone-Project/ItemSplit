@@ -51,8 +51,6 @@ public class Receipt {
     @JoinColumn(name = "created_by_user_id", updatable = false)
     private User createdBy;
 
-    private Long declaredTotal;
-
     @Column(name = "request_id", length = 64)
     private String requestId;
 
@@ -87,18 +85,16 @@ public class Receipt {
         return receipt;
     }
 
-    public static Receipt createManual(Room room, String name, RoomMember payer, Long declaredTotal, LocalDate purchasedAt) {
+    public static Receipt createManual(Room room, String name, RoomMember payer, LocalDate purchasedAt) {
         Receipt receipt = new Receipt(room, name, ReceiptSourceType.MANUAL);
         receipt.payer = payer;
-        receipt.declaredTotal = declaredTotal;
         receipt.purchasedAt = purchasedAt;
         return receipt;
     }
 
-    public void update(String name, RoomMember payer, Long declaredTotal, LocalDate purchasedAt) {
+    public void update(String name, RoomMember payer, LocalDate purchasedAt) {
         this.name = name;
         this.payer = payer;
-        this.declaredTotal = declaredTotal;
         this.purchasedAt = purchasedAt;
     }
 

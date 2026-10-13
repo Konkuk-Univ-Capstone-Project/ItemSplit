@@ -369,7 +369,7 @@ class AssignmentControllerTest {
 	void 영수증에_속하지_않은_품목의_담당자_변경은_404를_반환한다() throws Exception {
 		User owner = createUser("owner@example.com", "owner");
 		ItemFixture fixture = createItemFixture("Capstone Team", "Dinner", "Pasta", owner);
-		Receipt otherReceipt = receiptRepository.save(Receipt.createManual(fixture.room(), "Late Night", null, null, null));
+		Receipt otherReceipt = receiptRepository.save(Receipt.createManual(fixture.room(), "Late Night", null, null));
 		Item otherItem = itemRepository.save(Item.create(otherReceipt, "Pizza", 22000, 1));
 
 		mockMvc
@@ -444,7 +444,7 @@ class AssignmentControllerTest {
 		Arrays.stream(additionalMembers)
 			.forEach(member -> roomMemberRepository.save(RoomMember.create(room, member)));
 
-		Receipt receipt = receiptRepository.save(Receipt.createManual(room, receiptName, null, null, null));
+		Receipt receipt = receiptRepository.save(Receipt.createManual(room, receiptName, null, null));
 		Item item = itemRepository.save(Item.create(receipt, itemName, 15000, 1));
 		return new ItemFixture(room, receipt, item);
 	}

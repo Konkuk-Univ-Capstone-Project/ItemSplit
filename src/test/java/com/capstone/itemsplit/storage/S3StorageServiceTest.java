@@ -85,6 +85,21 @@ class S3StorageServiceTest {
 		assertThatThrownBy(() -> missingBucket.read("receipts/3/a.png")).isInstanceOf(IOException.class);
 	}
 
+    @Test void presignedGetReturnsPrivateStoredBytesWithoutAwsAuthorizationHeader() throws Exception {
+        var stored=storage.store("receipts/1",upload(),"png","image/png");
+        try(var presigner=software.amazon.awssdk.services.s3.presigner.S3Presigner.builder()
+            .endpointOverride(localstack.getEndpoint()).region(Region.of(localstack.getRegion()))
+            .credentialsProvider(StaticCredentialsProvider.create(AwsBasicCredentials.create(localstack.getAccessKey(),localstack.getSecretKey())))
+            .serviceConfiguration(software.amazon.awssdk.services.s3.S3Configuration.builder().pathStyleAccessEnabled(true).build()).build()) {
+            var url=new S3ReadUrls(presigner,BUCKET).create(stored.storedPath());
+            assertThat(url.url()).contains("X-Amz-Expires=300");
+            var response=java.net.http.HttpClient.newHttpClient().send(java.net.http.HttpRequest.newBuilder(java.net.URI.create(url.url())).GET().build(),
+                java.net.http.HttpResponse.BodyHandlers.ofByteArray());
+            assertThat(response.statusCode()).isEqualTo(200);
+            assertThat(response.body()).containsExactly(1,2,3);
+        }
+    }
+
 	private MockMultipartFile upload() {
 		return new MockMultipartFile("file", "receipt.png", "image/png", new byte[] {1, 2, 3});
 	}

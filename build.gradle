@@ -47,5 +47,16 @@ dependencies {
 }
 
 tasks.named('test') {
-	useJUnitPlatform()
+	useJUnitPlatform { excludeTags 'clova-live' }
+}
+
+// Opt-in only: one paid CLOVA request per invocation; never part of test/check/build.
+tasks.register('clovaSmokeTest', Test) {
+	group = 'verification'
+	description = 'Makes ONE real CLOVA OCR request using a synthetic receipt and local .env credentials.'
+	testClassesDirs = sourceSets.test.output.classesDirs
+	classpath = sourceSets.test.runtimeClasspath
+	useJUnitPlatform { includeTags 'clova-live' }
+	environment 'CLOVA_LIVE_TEST', 'true'
+	outputs.upToDateWhen { false }
 }
