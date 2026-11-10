@@ -27,7 +27,7 @@ class FlywayStartupTest {
         // The context only loads if Hibernate's validate accepted the schema Flyway created.
         assertThat(jdbcTemplate.queryForList(
                 "SELECT version FROM flyway_schema_history WHERE success ORDER BY installed_rank", String.class))
-                .containsExactly("1");
+                .containsExactly("1", "2");
         assertThat(jdbcTemplate.queryForObject(
                 "SELECT column_default FROM information_schema.columns "
                         + "WHERE table_name = 'items' AND column_name = 'excluded_from_settlement'", String.class))

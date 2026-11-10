@@ -1,98 +1,138 @@
 @startuml ItemSplitUseCase
-left to right direction
-
-skinparam packageStyle rectangle
+top to bottom direction
+title ItemSplit UseCase Diagram
 skinparam shadowing false
+skinparam packageStyle rectangle
+skinparam nodesep 20
+skinparam ranksep 15
+skinparam ArrowColor #64748B
 skinparam usecase {
   BackgroundColor #F8FAFC
   BorderColor #334155
-  ArrowColor #334155
 }
 skinparam actor {
   BorderColor #334155
   FontColor #0F172A
 }
-
-actor "서비스 사용자" as User
-actor "방 멤버" as Member
-actor "방장" as Owner
-actor "초대받은 사용자" as Invitee
-actor "공유 링크 조회자" as SharedViewer
-
-Member --|> User
-Owner --|> Member
-Invitee --|> User
-
-rectangle "ItemSplit 웹서비스" {
-  package "인증" {
-    usecase "회원가입" as UC_Signup
-    usecase "로그인" as UC_Login
-    usecase "내 정보 조회" as UC_Me
-  }
-
-  package "방/멤버 관리" {
-    usecase "방 생성" as UC_CreateRoom
-    usecase "방 삭제" as UC_DeleteRoom
-    usecase "방 멤버 조회" as UC_ViewMembers
-    usecase "수동 멤버 추가" as UC_AddManualMember
-    usecase "멤버 이름 수정" as UC_UpdateMember
-    usecase "멤버 제외/방 나가기" as UC_DeleteMember
-    usecase "초대 토큰 발급" as UC_IssueInvite
-    usecase "참여 옵션 조회" as UC_JoinOptions
-    usecase "초대 토큰으로 참여" as UC_JoinRoom
-    usecase "수동 멤버와 계정 매칭" as UC_ClaimManualMember
-  }
-
-  package "영수증/품목 관리" {
-    usecase "영수증 목록/상세 조회" as UC_ViewReceipts
-    usecase "이미지 영수증 업로드" as UC_UploadReceipt
-    usecase "수동 영수증 생성" as UC_CreateManualReceipt
-    usecase "영수증 수정/삭제" as UC_EditReceipt
-    usecase "품목 추가/수정/삭제" as UC_ManageItems
-    usecase "품목별 참여자 지정" as UC_AssignItemMembers
-  }
-
-  package "정산/공유" {
-    usecase "정산 결과 조회" as UC_ViewSettlement
-    usecase "송금 흐름 확인" as UC_ViewTransfers
-    usecase "읽기 전용 공유 토큰 발급" as UC_IssueShare
-    usecase "공유 정산 조회" as UC_ViewSharedSettlement
-  }
+' 바깥 프레임은 발표용 그룹이며, ItemSplit으로 표시한 안쪽 사각형이 시스템 경계다.
+skinparam rectangle {
+  BorderColor #CBD5E1
+  BackgroundColor white
 }
 
-User --> UC_Signup
-User --> UC_Login
-User --> UC_Me
-User --> UC_CreateRoom
+package "인증·방 참여" as AuthPanel {
+  actor "서비스 사용자" as User
+  rectangle "ItemSplit · 인증·방 참여" as AuthSystem {
+    usecase "회원가입·로그인\n내 정보 조회" as UC_Auth
+    usecase "방 생성" as UC_CreateRoom
+    usecase "초대 토큰으로 참여\n(참여 옵션 조회)" as UC_JoinRoom
+    usecase "기존 수동 멤버와\n계정 연결" as UC_ClaimManualMember
+  }
+  User -- UC_Auth
+  User -- UC_CreateRoom
+  User -- UC_JoinRoom
+  UC_ClaimManualMember ..> UC_JoinRoom : <<extend>>\n기존 멤버 선택 시
+}
 
-Member --> UC_ViewMembers
-Member --> UC_AddManualMember
-Member --> UC_UpdateMember
-Member --> UC_DeleteMember
-Member --> UC_IssueInvite
-Member --> UC_ViewReceipts
-Member --> UC_UploadReceipt
-Member --> UC_CreateManualReceipt
-Member --> UC_EditReceipt
-Member --> UC_ManageItems
-Member --> UC_AssignItemMembers
-Member --> UC_ViewSettlement
-Member --> UC_ViewTransfers
-Member --> UC_IssueShare
+package "방·멤버 관리" as RoomPanel {
+  actor "방 멤버" as RoomMember
+  actor "방장" as Owner
+  rectangle "ItemSplit · 방·멤버 관리" as RoomSystem {
+    usecase "멤버 조회·수동 멤버 추가\n이름 수정·멤버 제외" as UC_ManageMembers
+    usecase "초대 토큰 발급" as UC_IssueInvite
+    usecase "방 삭제" as UC_DeleteRoom
+  }
+  RoomMember -- UC_ManageMembers
+  RoomMember -- UC_IssueInvite
+  Owner -- UC_DeleteRoom
+}
 
-Owner --> UC_DeleteRoom
+package "영수증·품목 관리" as ReceiptPanel {
+  actor "방 멤버" as ReceiptMember
+  rectangle "ItemSplit · 영수증·품목 관리" as ReceiptSystem {
+    usecase "영수증 목록·상세 조회\n원본 이미지 조회·확대" as UC_ViewReceipts
+    usecase "이미지 영수증 업로드" as UC_UploadReceipt
+    usecase "수동 영수증 생성\n영수증 정보 수정·삭제" as UC_ManageReceipt
+    usecase "품목 추가·수정·삭제" as UC_ManageItems
+    usecase "품목별 참여자 지정\n정산 제외·재포함" as UC_AssignItemMembers
+  }
+  ReceiptMember -- UC_ViewReceipts
+  ReceiptMember -- UC_UploadReceipt
+  ReceiptMember -- UC_ManageReceipt
+  ReceiptMember -- UC_ManageItems
+  ReceiptMember -- UC_AssignItemMembers
+}
 
-Invitee --> UC_JoinOptions
-Invitee --> UC_JoinRoom
+package "OCR 인식·검토" as OcrPanel {
+  actor "영수증 작성자" as Author
+  actor "방 멤버" as OcrMember
+  actor "CLOVA OCR" as Clova
+  rectangle "ItemSplit · OCR 인식·검토" as OcrSystem {
+    usecase "영수증 OCR 인식 시작" as UC_StartOcr
+    usecase "인식 상태·초안 조회" as UC_ViewOcr
+    usecase "초안 검토·수정·저장\n누락·실패 품목 수동 보완" as UC_EditDraft
+    usecase "검토 확인 후\n정산 품목에 반영" as UC_ApplyDraft
+    usecase "이미지 추가 업로드\n(OCR 시작 전 / API)" as UC_AddImage
+    usecase "실패 이미지 인식 재시도\n(재시도 가능 오류 / API)" as UC_RetryOcr
+  }
+  Author -- UC_StartOcr
+  Author -- UC_EditDraft
+  Author -- UC_ApplyDraft
+  Author -- UC_AddImage
+  Author -- UC_RetryOcr
+  OcrMember -- UC_ViewOcr
+  Clova -- UC_StartOcr
+  Clova -- UC_RetryOcr
+}
 
-SharedViewer --> UC_ViewSharedSettlement
+package "정산·공유" as SettlementPanel {
+  actor "방 멤버" as SettlementMember
+  actor "공유 링크 조회자\n(비로그인 가능)" as SharedViewer
+  rectangle "ItemSplit · 정산·공유" as SettlementSystem {
+    usecase "참여자별 정산 결과 조회\n부담액·결제액·차액" as UC_ViewSettlement
+    usecase "송금 대상·금액 확인" as UC_ViewTransfers
+    usecase "읽기 전용 공유 토큰 발급" as UC_IssueShare
+    usecase "공유 정산 결과 조회" as UC_ViewSharedSettlement
+  }
+  SettlementMember -- UC_ViewSettlement
+  SettlementMember -- UC_ViewTransfers
+  SettlementMember -- UC_IssueShare
+  SharedViewer -- UC_ViewSharedSettlement
+  SharedViewer -- UC_ViewTransfers
+}
 
-UC_JoinRoom ..> UC_JoinOptions : <<include>>
-UC_JoinRoom ..> UC_ClaimManualMember : <<extend>>
-UC_CreateManualReceipt ..> UC_ManageItems : <<include>>
-UC_AssignItemMembers ..> UC_ViewMembers : <<include>>
-UC_ViewSettlement ..> UC_AssignItemMembers : <<include>>
-UC_ViewTransfers ..> UC_ViewSettlement : <<include>>
-UC_ViewSharedSettlement ..> UC_ViewSettlement : <<include>>
+' 기능 영역을 가로로 배치한다. 같은 이름의 액터는 동일 역할을 반복 표시한 것이다.
+AuthPanel -[hidden]right-> RoomPanel
+RoomPanel -[hidden]right-> ReceiptPanel
+ReceiptPanel -[hidden]right-> OcrPanel
+OcrPanel -[hidden]right-> SettlementPanel
 
+UC_Auth -[hidden]down-> UC_CreateRoom
+UC_CreateRoom -[hidden]down-> UC_ClaimManualMember
+UC_ClaimManualMember -[hidden]down-> UC_JoinRoom
+UC_ManageMembers -[hidden]down-> UC_IssueInvite
+UC_IssueInvite -[hidden]down-> UC_DeleteRoom
+UC_ViewReceipts -[hidden]down-> UC_UploadReceipt
+UC_UploadReceipt -[hidden]down-> UC_ManageReceipt
+UC_ManageReceipt -[hidden]down-> UC_ManageItems
+UC_ManageItems -[hidden]down-> UC_AssignItemMembers
+UC_StartOcr -[hidden]down-> UC_RetryOcr
+UC_RetryOcr -[hidden]down-> UC_EditDraft
+UC_EditDraft -[hidden]down-> UC_ApplyDraft
+UC_ApplyDraft -[hidden]down-> UC_AddImage
+UC_AddImage -[hidden]down-> UC_ViewOcr
+UC_ViewSettlement -[hidden]down-> UC_IssueShare
+UC_IssueShare -[hidden]down-> UC_ViewTransfers
+UC_ViewTransfers -[hidden]down-> UC_ViewSharedSettlement
+
+legend bottom
+  같은 이름의 액터는 동일 역할. 방장·영수증 작성자는 방 멤버이며, 방 멤버는 서비스 사용자 역할을 포함.
+  실선은 액터와 기능의 연관 관계이며 실행 순서를 뜻하지 않음. 안쪽 사각형은 ItemSplit의 기능별 시스템 경계.
+  OCR 품목의 이름·단가·수량 수정과 삭제는 작성자만 가능. 참여자 지정·정산 제외는 방 멤버가 가능.
+  OCR 초안은 저장 버전·검토 확인 후 반영하며 자동 반영·중복 반영을 방지.
+  정산 입력 오류 해결 후 결과 조회·공유 가능. 송금 대상·금액은 웹 화면에서 계산.
+  초대 참여·방 기능은 로그인 필요. 수동 멤버는 계정 없이 정산 대상에 포함 가능.
+  방장과 결제자로 지정된 멤버는 멤버 제외 불가. API 표시 기능은 백엔드만 지원.
+  이미지 업로드는 요청당 1장, 영수증당 최대 3장.
+endlegend
 @enduml

@@ -152,6 +152,109 @@ class OcrApiTest {
             assertThat(receiptImages.findAllByReceiptId(id)).isEmpty();
         }
     }
+    @Test void reviewedDraftAppendsItemsAndAssignmentsOnceAndSettlesWithoutDeclaredTotal() throws Exception {
+        Actor a=actor(); long id=demo(a,"TOTAL_MISMATCH"); start(a,id,"apply"); var job=complete(a,id);
+        long member=members.findAllByRoomId(a.room().getId()).getFirst().getId();
+        var payload=draftPayload(job,member);
+        String draftPath=path(a,id)+"/"+job.path("jobId").asLong()+"/draft";
+        var saved=json.readTree(mvc.perform(put(draftPath).header("Authorization",a.token()).contentType("application/json")
+            .content(json.writeValueAsString(payload))).andExpect(status().isOk()).andReturn().getResponse().getContentAsString()).path("data");
+        long revision=saved.at("/draft/revision").asLong();
+        assertThat(revision).isGreaterThan(job.at("/draft/revision").asLong());
+        mvc.perform(put(draftPath).header("Authorization",a.token()).contentType("application/json")
+            .content(json.writeValueAsString(payload))).andExpect(status().isConflict());
+        String body=json.writeValueAsString(Map.of("revision",revision,"reviewConfirmed",true));
+        for(int i=0;i<2;i++) mvc.perform(post(draftPath+"/apply").header("Authorization",a.token()).contentType("application/json").content(body))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.data.items.length()").value(2));
+        assertThat(jdbc.queryForObject("select count(*) from items where receipt_id=?",Integer.class,id)).isEqualTo(2);
+        assertThat(jdbc.queryForObject("select count(*) from assignments where item_id in (select id from items where receipt_id=?)",Integer.class,id)).isEqualTo(2);
+        assertThat(latest(a,id).at("/draft/status").asText()).isEqualTo("APPLIED");
+        mvc.perform(get("/api/rooms/"+a.room().getId()+"/settlements").header("Authorization",a.token()))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.data.ready").value(true))
+            .andExpect(jsonPath("$.data.members[0].burden").value(18000));
+        mvc.perform(put(draftPath).header("Authorization",a.token()).contentType("application/json")
+            .content(json.writeValueAsString(payload))).andExpect(status().isConflict());
+    }
+
+    @Test void applyRequiresOwnerCurrentRevisionReviewAndValidDraft() throws Exception {
+        Actor a=actor();long id=demo(a,"MISSING_VALUES");start(a,id,"invalid");var job=complete(a,id);
+        String url=path(a,id)+"/"+job.path("jobId").asLong()+"/draft/apply";
+        long revision=job.at("/draft/revision").asLong();
+        User teammate=users.save(User.create(UUID.randomUUID()+"@test.com","pw","teammate"));members.save(RoomMember.create(a.room(),teammate));
+        String teammateToken="Bearer "+tokens.createAccessToken(teammate).accessToken();
+        mvc.perform(post(url).header("Authorization",teammateToken).contentType("application/json")
+            .content(json.writeValueAsString(Map.of("revision",revision,"reviewConfirmed",true)))).andExpect(status().isForbidden());
+        for(var body:List.of(Map.of("revision",revision+1,"reviewConfirmed",true),Map.of("revision",revision,"reviewConfirmed",false),
+            Map.of("revision",revision,"reviewConfirmed",true))) {
+            mvc.perform(post(url).header("Authorization",a.token()).contentType("application/json").content(json.writeValueAsString(body)))
+                .andExpect(status().is4xxClientError());
+        }
+        assertThat(jdbc.queryForObject("select count(*) from items where receipt_id=?",Integer.class,id)).isZero();
+    }
+
+    @Test void manualRecoveryOfFailedImageAndRemovedInvalidRowsCanBeApplied() throws Exception {
+        Actor a=actor();long id=demo(a,"MISSING_VALUES","TIMEOUT");start(a,id,"recover");var job=complete(a,id);
+        String url=path(a,id)+"/"+job.path("jobId").asLong()+"/draft";
+        var payload=json.createObjectNode().put("revision",job.at("/draft/revision").asLong());
+        payload.putArray("coveredImageIds").add(job.at("/images/1/imageId").asLong());
+        var rows=payload.putArray("items");
+        for(var old:job.at("/draft/items")) {
+            var row=rows.addObject().put("draftItemId",old.path("draftItemId").asLong()).put("removed",true);
+            row.putArray("memberIds");
+        }
+        rows.addObject().put("name","수동 복구").put("price",5000).put("quantity",2).putArray("memberIds");
+        var saved=json.readTree(mvc.perform(put(url).header("Authorization",a.token()).contentType("application/json").content(payload.toString()))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.data.draft.itemsTotal").value(10000))
+            .andReturn().getResponse().getContentAsString()).path("data");
+        mvc.perform(post(url+"/apply").header("Authorization",a.token()).contentType("application/json")
+            .content(json.writeValueAsString(Map.of("revision",saved.at("/draft/revision").asLong(),"reviewConfirmed",true))))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.data.items.length()").value(1));
+        mvc.perform(get("/api/rooms/"+a.room().getId()+"/settlements").header("Authorization",a.token()))
+            .andExpect(jsonPath("$.data.ready").value(false)).andExpect(jsonPath("$.data.issues[0].code").value("MISSING_ASSIGNEES"));
+        mvc.perform(post(path(a,id)+"/"+job.path("jobId").asLong()+"/images/"+job.at("/images/1/imageId").asLong()+"/retry")
+            .header("Authorization",a.token())).andExpect(status().isConflict());
+    }
+
+    @Test void concurrentApplyAppendsAndPreservesExistingItemsAndMetadata() throws Exception {
+        Actor a=actor();long id=demo(a,"NORMAL");start(a,id,"concurrent-apply");var job=complete(a,id);
+        jdbc.update("insert into items(receipt_id,name,price,quantity,excluded_from_settlement) values(?,?,?,?,?)",id,"기존 수기 품목",100,1,true);
+        jdbc.execute("alter table receipts add column if not exists declared_total bigint");
+        jdbc.update("update receipts set name=?,declared_total=? where id=?","사용자가 입력한 이름",100,id);
+        String url=path(a,id)+"/"+job.path("jobId").asLong()+"/draft/apply";
+        String body=json.writeValueAsString(Map.of("revision",job.at("/draft/revision").asLong(),"reviewConfirmed",true));
+        try(var pool=Executors.newFixedThreadPool(2)) {
+            Callable<Integer> request=()->mvc.perform(post(url).header("Authorization",a.token()).contentType("application/json").content(body))
+                .andReturn().getResponse().getStatus();
+            var f1=pool.submit(request);var f2=pool.submit(request);
+            assertThat(f1.get(10,TimeUnit.SECONDS)).isEqualTo(200);assertThat(f2.get(10,TimeUnit.SECONDS)).isEqualTo(200);
+        }
+        assertThat(jdbc.queryForObject("select count(*) from items where receipt_id=?",Integer.class,id)).isEqualTo(3);
+        assertThat(jdbc.queryForObject("select declared_total from receipts where id=?", Long.class, id)).isEqualTo(100);
+        assertThat(receipts.findById(id).orElseThrow().getName()).isEqualTo("사용자가 입력한 이름");
+    }
+
+    @Test void foreignMembersAndExcessTotalsAreRejectedWithoutPartialWrites() throws Exception {
+        Actor a=actor();Actor other=actor();long id=demo(a,"NORMAL");start(a,id,"limits");var job=complete(a,id);
+        String url=path(a,id)+"/"+job.path("jobId").asLong()+"/draft";
+        long member=members.findAllByRoomId(other.room().getId()).getFirst().getId();
+        mvc.perform(put(url).header("Authorization",a.token()).contentType("application/json").content(json.writeValueAsString(draftPayload(job,member))))
+            .andExpect(status().isBadRequest());
+        jdbc.update("insert into items(receipt_id,name,price,quantity,excluded_from_settlement) values(?,?,?,?,?)",id,"한도 품목",1000000,10,true);
+        mvc.perform(post(url+"/apply").header("Authorization",a.token()).contentType("application/json")
+            .content(json.writeValueAsString(Map.of("revision",job.at("/draft/revision").asLong(),"reviewConfirmed",true))))
+            .andExpect(status().isBadRequest());
+        assertThat(jdbc.queryForObject("select count(*) from items where receipt_id=?",Integer.class,id)).isEqualTo(1);
+        assertThat(latest(a,id).at("/draft/status").asText()).isEqualTo("EDITING");
+    }
+
+    private Map<String,Object> draftPayload(JsonNode job,long member) {
+        List<Map<String,Object>> lines=new ArrayList<>();
+        for(var line:job.at("/draft/items")) lines.add(Map.of("draftItemId",line.path("draftItemId").asLong(),
+            "name",line.path("name").asText(),"price",line.path("price").asLong(),"quantity",line.path("quantity").asInt(),
+            "memberIds",List.of(member),"excludedFromSettlement",false,"removed",false));
+        return Map.of("revision",job.at("/draft/revision").asLong(),"items",lines,"coveredImageIds",List.of());
+    }
+
     private Actor actor() {
         User user=users.save(User.create(UUID.randomUUID()+"@test.com","password","tester"));
         Room room=rooms.save(Room.create("OCR test",user));members.save(RoomMember.create(room,user));

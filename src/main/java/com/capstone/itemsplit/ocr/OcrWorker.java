@@ -29,17 +29,18 @@ public class OcrWorker {
     private final RoomMemberRepository members;
     private final ReceiptImageReader reader;
     private final ReceiptOcrEngine engine;
+    private final OcrQuotaService quotas;
     private final ObjectMapper mapper;
     private final ThreadPoolTaskExecutor executor;
     private final TransactionTemplate tx;
     private final Duration stuckAfter;
 
     public OcrWorker(OcrJobRepository jobs,OcrJobImageRepository images,OcrDraftRepository drafts,OcrDraftItemRepository items,
-        RoomRepository rooms,RoomMemberRepository members,ReceiptImageReader reader,ReceiptOcrEngine engine,ObjectMapper mapper,
+        RoomRepository rooms,RoomMemberRepository members,ReceiptImageReader reader,ReceiptOcrEngine engine,ObjectMapper mapper,OcrQuotaService quotas,
         @Qualifier("ocrExecutor") ThreadPoolTaskExecutor executor,PlatformTransactionManager transactions,
         @Value("${app.ocr.stuck-after:3m}") Duration stuckAfter) {
         this.jobs=jobs;this.images=images;this.drafts=drafts;this.items=items;this.rooms=rooms;this.members=members;
-        this.reader=reader;this.engine=engine;this.mapper=mapper;this.executor=executor;this.stuckAfter=stuckAfter;
+        this.reader=reader;this.engine=engine;this.mapper=mapper;this.quotas=quotas;this.executor=executor;this.stuckAfter=stuckAfter;
         if(stuckAfter.isNegative() || stuckAfter.isZero())throw new IllegalArgumentException("stuck-after must be positive");
         tx=new TransactionTemplate(transactions);tx.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
     }
@@ -62,6 +63,8 @@ public class OcrWorker {
                 catch(IOException e){throw new OcrEngineException("IMAGE_UNAVAILABLE",true);}
                 if(bytes==null || bytes.length==0) throw new OcrEngineException("IMAGE_UNAVAILABLE",true);
                 if(bytes.length>10_485_760)throw new OcrEngineException("UNSUPPORTED_INPUT",false);
+                // Commit the provider handoff before calling it. An uncertain post-handoff crash stays charged.
+                if(!Boolean.TRUE.equals(tx.execute(status->markInvoked(claim)))) return;
                 OcrImageResult result=engine.recognize(new OcrImageInput(bytes,claim.contentType(),claim.filename()));
                 if(result==null || result.lines()==null)throw new OcrEngineException("PROVIDER_ERROR",true);
                 if(result.lines().isEmpty())throw new OcrEngineException("EMPTY_RESULT",false);
@@ -78,7 +81,7 @@ public class OcrWorker {
         OcrJob job=lockJob(jobId);if(job==null)return null;
         var rows=images.findAllByJobIdOrderBySortOrder(jobId);
         if(!members.existsByRoomIdAndUserId(job.getReceipt().getRoom().getId(),job.getRequestedByUserId())) {
-            rows.stream().filter(this::active).forEach(i->i.fail("ACCESS_REVOKED",false));summarize(job,rows);return null;
+            rows.stream().filter(this::active).forEach(i->{quotas.releaseUncalled(i);i.fail("ACCESS_REVOKED",false);});summarize(job,rows);return null;
         }
         // Only one image of a job may be in flight, including duplicate executor deliveries.
         if(rows.stream().anyMatch(i->i.getStatus()==OcrJobImage.Status.PROCESSING))return null;
@@ -87,6 +90,16 @@ public class OcrWorker {
         var row=next.get();row.start();job.status(OcrJob.Status.PROCESSING);
         var image=row.getImage();
         return new Claim(jobId,row.getId(),row.getAttemptCount(),image.getStoredPath(),image.getContentType(),image.getOriginalFilename(),image.getFileSize());
+    }
+    private boolean markInvoked(Claim claim) {
+        OcrJob job=lockJob(claim.jobId());if(job==null)return false;
+        var rows=images.findAllByJobIdOrderBySortOrder(job.getId());
+        var row=current(rows,claim);if(row==null)return false;
+        if(!members.existsByRoomIdAndUserId(job.getReceipt().getRoom().getId(),job.getRequestedByUserId())) {
+            rows.stream().filter(this::active).forEach(i->{quotas.releaseUncalled(i);i.fail("ACCESS_REVOKED",false);});
+            summarize(job,rows);return false;
+        }
+        row.markQuotaInvoked();return true;
     }
     private void complete(Claim claim,OcrImageResult result,long duration) {
         OcrJob job=lockJob(claim.jobId());if(job==null)return;
@@ -109,7 +122,7 @@ public class OcrWorker {
         tx.executeWithoutResult(status->{
             var job=lockJob(claim.jobId());if(job==null)return;
             var rows=images.findAllByJobIdOrderBySortOrder(job.getId());var row=current(rows,claim);
-            if(row!=null)row.fail(code,retryable);summarize(job,rows);
+            if(row!=null){quotas.releaseUncalled(row);row.fail(code,retryable);}summarize(job,rows);
         });
     }
     private OcrJobImage current(List<OcrJobImage> rows,Claim claim) {
@@ -144,7 +157,7 @@ public class OcrWorker {
             LocalDateTime cutoff=LocalDateTime.now().minus(stuckAfter);
             for(var row:rows) {
                 LocalDateTime since=row.getStatus()==OcrJobImage.Status.PENDING?row.getQueuedAt():row.getStartedAt();
-                if(active(row) && (all || since.isBefore(cutoff)))row.fail("INTERRUPTED",true);
+                if(active(row) && (all || since.isBefore(cutoff))){quotas.releaseUncalled(row);row.fail("INTERRUPTED",true);}
             }
             summarize(job,rows);
         });

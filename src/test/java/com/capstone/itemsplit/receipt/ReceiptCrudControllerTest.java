@@ -79,8 +79,8 @@ class ReceiptCrudControllerTest {
 		User owner = createUser("owner@example.com", "owner");
 		Room room = roomRepository.save(Room.create("Capstone Team", owner));
 		roomMemberRepository.save(RoomMember.create(room, owner));
-		receiptRepository.save(Receipt.createManual(room, "카페", null, null, null));
-		receiptRepository.save(Receipt.createManual(room, "저녁 식사", null, null, null));
+		receiptRepository.save(Receipt.createManual(room, "카페", null, null));
+		receiptRepository.save(Receipt.createManual(room, "저녁 식사", null, null));
 
 		mockMvc
 			.perform(
@@ -98,7 +98,7 @@ class ReceiptCrudControllerTest {
 		User owner = createUser("owner@example.com", "owner");
 		Room room = roomRepository.save(Room.create("Capstone Team", owner));
 		roomMemberRepository.save(RoomMember.create(room, owner));
-		Receipt receipt = receiptRepository.save(Receipt.createManual(room, "카페", null, null, null));
+		Receipt receipt = receiptRepository.save(Receipt.createManual(room, "카페", null, null));
 		itemRepository.save(Item.create(receipt, "아메리카노", 4500, 2));
 
 		mockMvc
@@ -115,12 +115,12 @@ class ReceiptCrudControllerTest {
 	}
 
 	@Test
-	@DisplayName("GET /api/rooms/{roomId}/receipts/{receiptId} 요청은 선언 합계와 품목 합계가 다르면 경고를 반환한다")
-	void 영수증_상세_조회는_선언_합계와_품목_합계가_다르면_경고를_반환한다() throws Exception {
+	@DisplayName("GET /api/rooms/{roomId}/receipts/{receiptId} 요청은 현재 품목 합계를 반환한다")
+	void 영수증_상세_조회는_현재_품목_합계를_반환한다() throws Exception {
 		User owner = createUser("owner@example.com", "owner");
 		Room room = roomRepository.save(Room.create("Capstone Team", owner));
 		roomMemberRepository.save(RoomMember.create(room, owner));
-		Receipt receipt = receiptRepository.save(Receipt.createManual(room, "카페", null, 99999L, null));
+		Receipt receipt = receiptRepository.save(Receipt.createManual(room, "카페", null, null));
 		itemRepository.save(Item.create(receipt, "아메리카노", 4500, 2));
 
 		mockMvc
@@ -129,7 +129,7 @@ class ReceiptCrudControllerTest {
 					.header(HttpHeaders.AUTHORIZATION, bearer(owner))
 			)
 			.andExpect(status().isOk())
-			.andExpect(jsonPath("$.data.warning").value(org.hamcrest.Matchers.containsString("검토 필요")));
+			.andExpect(jsonPath("$.data.itemsTotal").value(9000));
 	}
 
 	@Test
@@ -138,7 +138,7 @@ class ReceiptCrudControllerTest {
 		User owner = createUser("owner@example.com", "owner");
 		Room room = roomRepository.save(Room.create("Capstone Team", owner));
 		RoomMember ownerMember = roomMemberRepository.save(RoomMember.create(room, owner));
-		Receipt receipt = receiptRepository.save(Receipt.createManual(room, "카페", null, null, null));
+		Receipt receipt = receiptRepository.save(Receipt.createManual(room, "카페", null, null));
 
 		mockMvc
 			.perform(
@@ -149,15 +149,14 @@ class ReceiptCrudControllerTest {
 						{
 						  "requestId": "legacy-test-request",
 						  "name": "스타벅스",
-						  "payerMemberId": %d,
-						  "declaredTotal": 9000
+						  "payerMemberId": %d
 						}
 						""".formatted(ownerMember.getId()))
 			)
 			.andExpect(status().isOk())
 			.andExpect(jsonPath("$.data.name").value("스타벅스"))
 			.andExpect(jsonPath("$.data.payerMemberId").value(ownerMember.getId()))
-			.andExpect(jsonPath("$.data.declaredTotal").value(9000));
+			.andExpect(jsonPath("$.data.declaredTotal").doesNotHaveJsonPath());
 	}
 
 	@Test
@@ -166,7 +165,7 @@ class ReceiptCrudControllerTest {
 		User owner = createUser("owner@example.com", "owner");
 		Room room = roomRepository.save(Room.create("Capstone Team", owner));
 		RoomMember ownerMember = roomMemberRepository.save(RoomMember.create(room, owner));
-		Receipt receipt = receiptRepository.save(Receipt.createManual(room, "카페", null, null, null));
+		Receipt receipt = receiptRepository.save(Receipt.createManual(room, "카페", null, null));
 		Item item = itemRepository.save(Item.create(receipt, "아메리카노", 4500, 1));
 		assignmentRepository.save(Assignment.create(item, ownerMember));
 
@@ -199,7 +198,6 @@ class ReceiptCrudControllerTest {
 						  "requestId": "legacy-test-request",
 						  "name": "카페",
 						  "payerMemberId": %d,
-						  "declaredTotal": 9000,
 						  "items": [
 						    { "name": "아메리카노", "price": 4500, "quantity": 2, "memberIds": [], "excludedFromSettlement": false }
 						  ]
@@ -209,7 +207,7 @@ class ReceiptCrudControllerTest {
 			.andExpect(status().isCreated())
 			.andExpect(jsonPath("$.data.payerMemberId").value(ownerMember.getId()))
 			.andExpect(jsonPath("$.data.payerNickname").value("owner"))
-			.andExpect(jsonPath("$.data.declaredTotal").value(9000));
+			.andExpect(jsonPath("$.data.declaredTotal").doesNotHaveJsonPath());
 	}
 
 	@Test
@@ -248,7 +246,7 @@ class ReceiptCrudControllerTest {
 		User stranger = createUser("stranger@example.com", "stranger");
 		Room room = roomRepository.save(Room.create("Capstone Team", owner));
 		roomMemberRepository.save(RoomMember.create(room, owner));
-		Receipt receipt = receiptRepository.save(Receipt.createManual(room, "카페", null, null, null));
+		Receipt receipt = receiptRepository.save(Receipt.createManual(room, "카페", null, null));
 
 		mockMvc
 			.perform(

@@ -59,7 +59,7 @@ class SettlementSnapshotTest {
         Room room = rooms.save(Room.create("snapshot", owner));
         RoomMember first = members.save(RoomMember.create(room, owner));
         RoomMember second = members.save(RoomMember.createManual(room, "second"));
-        Receipt receipt = receipts.save(Receipt.createManual(room, "receipt", first, 1000L, null));
+        Receipt receipt = receipts.save(Receipt.createManual(room, "receipt", first, null));
         Item item = items.save(Item.create(receipt, "item", 1000L, 1));
         assignments.save(Assignment.create(item, first));
         CountDownLatch receiptRead = new CountDownLatch(1);
@@ -89,7 +89,7 @@ class SettlementSnapshotTest {
                     throw new AssertionError("Settlement did not reach the receipt query");
                 }
                 var writer = executor.submit(() -> receiptService.saveContents(room.getId(), receipt.getId(), owner.getId(),
-                    "receipt", second.getId(), 1000L, null,
+                    "receipt", second.getId(), null,
                     List.of(new ReceiptService.SaveItemCommand(item.getId(), "item", 1000L, 1,
                         List.of(second.getId()), false))));
                 writer.get(10, TimeUnit.SECONDS);

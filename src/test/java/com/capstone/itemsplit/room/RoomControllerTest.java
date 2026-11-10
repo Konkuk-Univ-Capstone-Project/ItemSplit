@@ -118,7 +118,7 @@ class RoomControllerTest {
 		Room room = roomRepository.save(Room.create("Capstone Team", owner));
 		RoomMember ownerMember = roomMemberRepository.save(RoomMember.create(room, owner));
 		RoomMember manualMember = roomMemberRepository.save(RoomMember.createManual(room, "민지"));
-		Receipt receipt = receiptRepository.save(Receipt.createManual(room, "Dinner", manualMember, null, null));
+		Receipt receipt = receiptRepository.save(Receipt.createManual(room, "Dinner", manualMember, null));
 		Item item = itemRepository.save(Item.create(receipt, "Pasta", 15000, 1));
 		assignmentRepository.save(Assignment.create(item, ownerMember));
 		roomInviteTokenRepository.save(RoomInviteToken.create(room, "invite-token", LocalDateTime.now().plusDays(1)));
@@ -377,7 +377,7 @@ class RoomControllerTest {
 		Room room = roomRepository.save(Room.create("Capstone Team", owner));
 		roomMemberRepository.save(RoomMember.create(room, owner));
 		RoomMember manualMember = roomMemberRepository.save(RoomMember.createManual(room, "민지"));
-		Receipt receipt = receiptRepository.save(Receipt.createManual(room, "Dinner", null, null, null));
+		Receipt receipt = receiptRepository.save(Receipt.createManual(room, "Dinner", null, null));
 		Item item = itemRepository.save(Item.create(receipt, "Pasta", 15000, 1));
 		assignmentRepository.save(Assignment.create(item, manualMember));
 
@@ -399,8 +399,8 @@ class RoomControllerTest {
 		Room room = roomRepository.save(Room.create("Capstone Team", owner));
 		roomMemberRepository.save(RoomMember.create(room, owner));
 		RoomMember manualMember = roomMemberRepository.save(RoomMember.createManual(room, "민지"));
-		receiptRepository.save(Receipt.createManual(room, "노래방", manualMember, null, null));
-		receiptRepository.save(Receipt.createManual(room, "카페", manualMember, null, null));
+		receiptRepository.save(Receipt.createManual(room, "노래방", manualMember, null));
+		receiptRepository.save(Receipt.createManual(room, "카페", manualMember, null));
 
 		mockMvc
 			.perform(
@@ -424,7 +424,7 @@ class RoomControllerTest {
 		Room room = roomRepository.save(Room.create("Capstone Team", owner));
 		roomMemberRepository.save(RoomMember.create(room, owner));
 		RoomMember guestMember = roomMemberRepository.save(RoomMember.create(room, guest));
-		Receipt receipt = receiptRepository.save(Receipt.createManual(room, "Dinner", null, null, null));
+		Receipt receipt = receiptRepository.save(Receipt.createManual(room, "Dinner", null, null));
 		Item item = itemRepository.save(Item.create(receipt, "Pasta", 15000, 1));
 		assignmentRepository.save(Assignment.create(item, guestMember));
 
@@ -492,7 +492,7 @@ class RoomControllerTest {
 		Room room = roomRepository.save(Room.create("Capstone Team", owner));
 		roomMemberRepository.save(RoomMember.create(room, owner));
 		RoomMember guestMember = roomMemberRepository.save(RoomMember.create(room, guest));
-		Receipt receipt = receiptRepository.save(Receipt.createManual(room, "Dinner", null, null, null));
+		Receipt receipt = receiptRepository.save(Receipt.createManual(room, "Dinner", null, null));
 		Item item = itemRepository.save(Item.create(receipt, "Pasta", 15000, 1));
 		assignmentRepository.save(Assignment.create(item, guestMember));
 
@@ -518,7 +518,7 @@ class RoomControllerTest {
 		roomMemberRepository.save(RoomMember.create(room, owner));
 		roomMemberRepository.save(RoomMember.create(room, guest));
 		RoomMember anotherMember = roomMemberRepository.save(RoomMember.create(room, another));
-		Receipt receipt = receiptRepository.save(Receipt.createManual(room, "Dinner", null, null, null));
+		Receipt receipt = receiptRepository.save(Receipt.createManual(room, "Dinner", null, null));
 		Item item = itemRepository.save(Item.create(receipt, "Pasta", 15000, 1));
 		assignmentRepository.save(Assignment.create(item, anotherMember));
 
@@ -541,8 +541,8 @@ class RoomControllerTest {
 		Room room = roomRepository.save(Room.create("Capstone Team", owner));
 		roomMemberRepository.save(RoomMember.create(room, owner));
 		RoomMember guestMember = roomMemberRepository.save(RoomMember.create(room, guest));
-		receiptRepository.save(Receipt.createManual(room, "노래방", guestMember, null, null));
-		receiptRepository.save(Receipt.createManual(room, "카페", guestMember, null, null));
+		receiptRepository.save(Receipt.createManual(room, "노래방", guestMember, null));
+		receiptRepository.save(Receipt.createManual(room, "카페", guestMember, null));
 
 		mockMvc
 			.perform(

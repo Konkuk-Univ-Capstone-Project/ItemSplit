@@ -5,6 +5,9 @@ import type {
   ItemWriteRequest,
   ItemWriteResult,
   ReceiptDetail,
+  ReceiptImage,
+  ReceiptOcrJob,
+  OcrDraftWrite,
   ReceiptItem,
   ReceiptSummary,
   RoomMember,
@@ -17,6 +20,20 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '';
 type RequestOptions = RequestInit & {
   token?: string | null;
 };
+
+export class ApiError extends Error {
+  constructor(message: string, public status: number, public reason?: string, public retryAfterMs?: number) {
+    super(message);
+    this.name = 'ApiError';
+  }
+}
+
+function retryAfterMilliseconds(value: string | null): number | undefined {
+  if (!value) return undefined;
+  const seconds = Number(value);
+  const delay = Number.isFinite(seconds) ? seconds * 1000 : Date.parse(value) - Date.now();
+  return Number.isFinite(delay) && delay >= 0 ? delay : undefined;
+}
 
 async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const headers = new Headers(options.headers);
@@ -39,9 +56,15 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
     return undefined as T;
   }
 
-  const envelope = (await response.json()) as ApiEnvelope<T>;
-  if (!response.ok || !envelope.success) {
-    throw new Error(envelope.error?.message ?? '요청을 처리하지 못했습니다.');
+  const envelope = await response.json().catch((error: unknown) => {
+    // HTML/plain-text error pages still carry useful HTTP metadata. Transport failures must
+    // keep their original type so polling can retry a connection lost after response headers.
+    if (error instanceof SyntaxError) return null;
+    throw error;
+  }) as ApiEnvelope<T> | null;
+  if (!response.ok || !envelope?.success) {
+    throw new ApiError(envelope?.error?.message ?? '요청을 처리하지 못했습니다.', response.status,
+      envelope?.error?.details?.[0]?.reason, retryAfterMilliseconds(response.headers.get('Retry-After')));
   }
 
   return envelope.data as T;
@@ -157,13 +180,39 @@ export function getReceipt(token: string, roomId: number, receiptId: number) {
   return request<ReceiptDetail>(`/api/rooms/${roomId}/receipts/${receiptId}`, { token });
 }
 
+export function uploadReceiptImage(token: string, roomId: number, file: File, name: string) {
+  const body = new FormData();
+  body.append('file', file);
+  body.append('name', name);
+  return request<{ receiptId: number }>(`/api/rooms/${roomId}/receipts/image`, { method: 'POST', token, body });
+}
+
+export function startReceiptOcr(token: string, roomId: number, receiptId: number, requestId: string) {
+  return request<ReceiptOcrJob>(`/api/rooms/${roomId}/receipts/${receiptId}/ocr/jobs`, {
+    method: 'POST', token, body: JSON.stringify({ requestId })
+  });
+}
+
+export function getLatestReceiptOcr(token: string, roomId: number, receiptId: number, signal?: AbortSignal) {
+  return request<ReceiptOcrJob | null>(`/api/rooms/${roomId}/receipts/${receiptId}/ocr/jobs/latest`, { token, signal });
+}
+
+export function getReceiptOcr(token: string, roomId: number, receiptId: number, jobId: number, signal?: AbortSignal) {
+  return request<ReceiptOcrJob>(`/api/rooms/${roomId}/receipts/${receiptId}/ocr/jobs/${jobId}`, { token, signal });
+}
+
+export function retryReceiptOcrImage(token: string, roomId: number, receiptId: number, jobId: number, imageId: number) {
+  return request<ReceiptOcrJob>(`/api/rooms/${roomId}/receipts/${receiptId}/ocr/jobs/${jobId}/images/${imageId}/retry`, {
+    token, method: 'POST'
+  });
+}
+
 export function createManualReceipt(
   token: string,
   roomId: number,
   payload: {
     name: string;
     payerMemberId: number | null;
-    declaredTotal: number | null;
     purchasedAt: string | null;
     requestId: string;
     items: Array<Omit<ReceiptItem, 'itemId'>>;
@@ -190,7 +239,6 @@ export function updateReceipt(
   payload: {
     name: string;
     payerMemberId: number | null;
-    declaredTotal: number | null;
     purchasedAt: string | null;
   }
 ) {
@@ -208,7 +256,6 @@ export function updateReceiptContents(
   payload: {
     name: string;
     payerMemberId: number | null;
-    declaredTotal: number | null;
     purchasedAt: string | null;
     items: Array<Omit<ReceiptItem, 'itemId'> & { itemId: number | null }>;
   }
@@ -267,4 +314,21 @@ export function getSettlement(token: string, roomId: number) {
 
 export function getSharedSettlement(shareToken: string) {
   return request<SharedSettlement>(`/api/shared/rooms/${encodeURIComponent(shareToken)}/settlements`);
+}
+
+export function saveReceiptOcrDraft(token: string, roomId: number, receiptId: number, jobId: number, payload: OcrDraftWrite) {
+  return request<ReceiptOcrJob>(`/api/rooms/${roomId}/receipts/${receiptId}/ocr/jobs/${jobId}/draft`, {
+    method: 'PUT', token, body: JSON.stringify(payload)
+  });
+}
+
+export function applyReceiptOcrDraft(token: string, roomId: number, receiptId: number, jobId: number, revision: number) {
+  return request<ReceiptDetail>(`/api/rooms/${roomId}/receipts/${receiptId}/ocr/jobs/${jobId}/draft/apply`, {
+    method: 'POST', token, body: JSON.stringify({ revision, reviewConfirmed: true })
+  });
+}
+
+export async function getReceiptImages(token: string, roomId: number, receiptId: number) {
+  const images = await request<ReceiptImage[]>(`/api/rooms/${roomId}/receipts/${receiptId}/images`, { token });
+  return images.map(image => ({ ...image, url: image.url.startsWith('/') ? `${API_BASE_URL}${image.url}` : image.url }));
 }

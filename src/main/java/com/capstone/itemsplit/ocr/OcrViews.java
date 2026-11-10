@@ -20,11 +20,11 @@ public class OcrViews {
         var lines=items.findAllByDraftIdOrderBySortOrder(draft.getId()).stream().map(this::line).toList();
         List<String> blockers=new ArrayList<>();
         if(job.getStatus()==OcrJob.Status.PENDING || job.getStatus()==OcrJob.Status.PROCESSING) blockers.add("JOB_IN_PROGRESS");
-        if(rows.stream().anyMatch(i->i.getStatus()==OcrJobImage.Status.FAILED)) blockers.add("IMAGE_FAILED_UNCOVERED");
-        if(lines.isEmpty()) blockers.add("NO_ITEMS");
-        if(lines.stream().anyMatch(i->!i.issues().isEmpty())) blockers.add("ITEM_ISSUES");
+        if(rows.stream().anyMatch(i->i.getStatus()==OcrJobImage.Status.FAILED && !i.isManuallyCovered())) blockers.add("IMAGE_FAILED_UNCOVERED");
+        if(lines.stream().allMatch(LineView::removed)) blockers.add("NO_ITEMS");
+        if(lines.stream().anyMatch(i->!i.removed() && !i.issues().isEmpty())) blockers.add("ITEM_ISSUES");
         BigInteger total=BigInteger.ZERO;
-        for(var line:lines) if(line.price()!=null && line.quantity()!=null)
+        for(var line:lines) if(!line.removed() && line.price()!=null && line.quantity()!=null)
             total=total.add(BigInteger.valueOf(line.price()).multiply(BigInteger.valueOf(line.quantity())));
         if(total.compareTo(BigInteger.valueOf(10_000_000))>0) blockers.add("RECEIPT_TOTAL_LIMIT");
         // Null signals an unsafe JS integer; never wrap or silently truncate an OCR sum.
@@ -34,9 +34,9 @@ public class OcrViews {
         var totals=rows.stream().map(OcrJobImage::getTotalAmount).filter(Objects::nonNull).toList();
         if(!totals.isEmpty() && totals.stream().noneMatch(t->BigInteger.valueOf(t).equals(finalTotal))) warnings.add("OCR_TOTAL_MISMATCH");
         var imageViews=rows.stream().map(row->new ImageView(row.getImage().getId(),row.getSortOrder(),row.getStatus().name(),
-            row.getErrorCode(),row.isRetryable(),row.getAttemptCount(),row.getDurationMs(),row.getStatus()==OcrJobImage.Status.SUCCEEDED
+            row.isManuallyCovered(),row.getErrorCode(),row.isRetryable(),row.getAttemptCount(),row.getDurationMs(),row.getStatus()==OcrJobImage.Status.SUCCEEDED
                 ?new Candidates(row.getStoreName(),row.getPurchasedAt(),row.getTotalAmount(),json(row.getCandidateDetail())):null)).toList();
-        return new JobView(job.getId(),job.getReceipt().getId(),job.getStatus().name(),job.getProvider(),imageViews,
+        return new JobView(job.getId(),job.getReceipt().getId(),job.getStatus().name(),job.getProvider(),job.getRequestedByUserId(),imageViews,
             new DraftView(draft.getId(),draft.getStatus(),draft.getRevision(),lines,safeTotal,List.copyOf(blockers),warnings));
     }
     private LineView line(OcrDraftItem item) {
@@ -58,16 +58,16 @@ public class OcrViews {
         Long derived=null;
         if(price==null && item.getOcrLineAmount()!=null && item.getOcrLineAmount()>0 && qty!=null && qty>0
           && item.getOcrLineAmount()%qty==0) derived=item.getOcrLineAmount()/qty;
-        return new LineView(item.getId(),item.getImage().getId(),item.getRowIndex(),
+        return new LineView(item.getId(),item.getImage()==null?null:item.getImage().getId(),item.getRowIndex(),
             new Original(item.getOcrName(),item.getOcrQuantity(),item.getOcrUnitPrice(),item.getOcrLineAmount(),derived,flags,json(item.getOcrDetail())),
-            item.getName(),price,qty,List.of(),item.isExcludedFromSettlement(),item.isRemoved(),issues,warnings);
+            item.getName(),price,qty,item.getMemberIds().stream().sorted().toList(),item.isExcludedFromSettlement(),item.isRemoved(),issues,warnings);
     }
     private JsonNode json(String value) {
         if(value==null) return null;
         try{return mapper.readTree(value);}catch(Exception e){throw new IllegalStateException("Invalid stored OCR detail",e);}
     }
-    public record JobView(Long jobId,Long receiptId,String status,String provider,List<ImageView> images,DraftView draft){}
-    public record ImageView(Long imageId,int order,String status,String errorCode,boolean retryable,int attemptCount,Long durationMs,Candidates candidates){}
+    public record JobView(Long jobId,Long receiptId,String status,String provider,Long requestedByUserId,List<ImageView> images,DraftView draft){}
+    public record ImageView(Long imageId,int order,String status,boolean manuallyCovered,String errorCode,boolean retryable,int attemptCount,Long durationMs,Candidates candidates){}
     public record Candidates(String storeName,java.time.LocalDate purchasedAt,Long totalAmount,JsonNode detail){}
     public record DraftView(Long draftId,String status,long revision,List<LineView> items,Long itemsTotal,List<String> blockers,List<String> warnings){}
     public record LineView(Long draftItemId,Long imageId,int rowIndex,Original ocr,String name,Long price,Integer quantity,

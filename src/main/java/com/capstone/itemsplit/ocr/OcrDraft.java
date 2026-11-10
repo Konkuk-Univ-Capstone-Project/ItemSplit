@@ -24,5 +24,12 @@ public class OcrDraft {
         OcrDraft draft=new OcrDraft();draft.job=job;draft.receipt=job.getReceipt();draft.status="EDITING";
         draft.createdAt=LocalDateTime.now();draft.updatedAt=draft.createdAt;return draft;
     }
+    private Long appliedRevision;
+    private LocalDateTime appliedAt;
+    private Long appliedByUserId;
+    void apply(Long userId) {
+        appliedRevision=revision; appliedAt=LocalDateTime.now(); appliedByUserId=userId;
+        status="APPLIED"; touch();
+    }
     void touch() {updatedAt=LocalDateTime.now();}
 }

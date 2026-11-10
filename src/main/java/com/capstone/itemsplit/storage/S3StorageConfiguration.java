@@ -11,6 +11,10 @@ import software.amazon.awssdk.services.s3.S3Client;
 @ConditionalOnProperty(name = "app.storage.type", havingValue = "s3")
 class S3StorageConfiguration {
 
+    @Bean
+    software.amazon.awssdk.services.s3.presigner.S3Presigner s3Presigner(@Value("${app.storage.s3.region:ap-northeast-2}") String region) {
+        return software.amazon.awssdk.services.s3.presigner.S3Presigner.builder().region(Region.of(region)).build();
+    }
 	// Credentials come from the SDK's default chain (instance role, environment, local profile), never from this project.
 	@Bean
 	S3Client s3Client(@Value("${app.storage.s3.region:ap-northeast-2}") String region) {

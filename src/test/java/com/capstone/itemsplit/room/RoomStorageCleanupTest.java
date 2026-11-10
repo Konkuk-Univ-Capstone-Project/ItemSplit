@@ -75,7 +75,7 @@ class RoomStorageCleanupTest {
 			new MockMultipartFile("file", "receipt.png", "image/png", new byte[] {1, 2, 3}), "png", "image/png");
 		Receipt receipt = receiptRepository.save(Receipt.createImageUpload(room, "Receipt", owner, null));
 		receiptImageRepository.save(ReceiptImage.create(receipt, 1, stored));
-		receiptRepository.save(Receipt.createManual(room, "Manual", null, null, null));
+		receiptRepository.save(Receipt.createManual(room, "Manual", null, null));
 		return new Fixture(room.getId(), owner.getId(), receipt.getId(), storageRoot.resolve(stored.storedPath()));
 	}
 

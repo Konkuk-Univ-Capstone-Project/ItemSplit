@@ -12,6 +12,7 @@ import com.capstone.itemsplit.storage.StorageCleanupService;
 import com.capstone.itemsplit.user.UserRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.IOException;
+import java.math.BigInteger;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.LocalDate;
@@ -36,24 +37,24 @@ public class ReceiptService {
     private final UserRepository userRepository;
     private final StorageCleanupService storageCleanupService;
     private final ObjectMapper objectMapper;
+    private final com.capstone.itemsplit.ocr.OcrQuotaService ocrQuotas;
 
     @Transactional
     public ReceiptDetailResult createManualReceipt(Long roomId, Long userId, String requestId,
-        String name, Long payerMemberId, Long declaredTotal, LocalDate purchasedAt, List<SaveItemCommand> commands) {
+        String name, Long payerMemberId, LocalDate purchasedAt, List<SaveItemCommand> commands) {
         Room room = roomAuthorizationService.checkMemberForUpdate(roomId, userId);
         if (requestId == null || requestId.isBlank() || requestId.length() > 64) throw invalid("생성 요청 식별자가 필요합니다.");
         if (commands.stream().anyMatch(item -> item.itemId() != null)) throw invalid("새 영수증의 품목 ID는 비워 두어야 합니다.");
-        String fingerprint = fingerprint(name, payerMemberId, declaredTotal, purchasedAt, commands);
+        String fingerprint = fingerprint(name, payerMemberId, purchasedAt, commands);
         Optional<Receipt> existing = receiptRepository.findByRoomIdAndRequestId(roomId, requestId);
         if (existing.isPresent()) {
             Receipt receipt = existing.get();
             if (!fingerprint.equals(receipt.getRequestFingerprint())) throw invalid("같은 요청 식별자로 다른 내용을 저장할 수 없습니다.");
             return detail(receipt);
         }
-        MoneyPolicy.declaredTotal(declaredTotal);
         RoomMember payer = resolvePayer(roomId, payerMemberId);
         validateCommands(roomId, null, commands);
-        Receipt receipt = Receipt.createManual(room, name.trim(), payer, declaredTotal, purchasedAt);
+        Receipt receipt = Receipt.createManual(room, name.trim(), payer, purchasedAt);
         receipt.identifyCreation(requestId, fingerprint);
         receipt.recordCreator(userRepository.getReferenceById(userId));
         receiptRepository.save(receipt);
@@ -63,7 +64,13 @@ public class ReceiptService {
 
     public List<ReceiptSummaryResult> getReceipts(Long roomId, Long userId) {
         roomAuthorizationService.checkMember(roomId, userId);
-        return receiptRepository.findAllByRoomId(roomId).stream().map(ReceiptSummaryResult::from).toList();
+        List<Receipt> receipts = receiptRepository.findAllByRoomId(roomId);
+        if (receipts.isEmpty()) return List.of();
+        Map<Long, List<Item>> itemsByReceipt = itemRepository.findAllByReceiptIdIn(
+            receipts.stream().map(Receipt::getId).toList()).stream()
+            .collect(Collectors.groupingBy(item -> item.getReceipt().getId()));
+        return receipts.stream().map(receipt -> ReceiptSummaryResult.from(receipt,
+            itemsTotal(itemsByReceipt.getOrDefault(receipt.getId(), List.of())))).toList();
     }
 
     public ReceiptDetailResult getReceipt(Long roomId, Long receiptId, Long userId) {
@@ -73,23 +80,26 @@ public class ReceiptService {
 
     @Transactional
     public ReceiptDetailResult updateReceipt(Long roomId, Long receiptId, Long userId, String name,
-        Long payerMemberId, Long declaredTotal, LocalDate purchasedAt) {
+        Long payerMemberId, LocalDate purchasedAt) {
         roomAuthorizationService.checkMemberForUpdate(roomId, userId);
-        MoneyPolicy.declaredTotal(declaredTotal);
         Receipt receipt = findReceiptInRoom(roomId, receiptId);
-        receipt.update(name.trim(), resolvePayer(roomId, payerMemberId), declaredTotal, purchasedAt);
+        receipt.update(name.trim(), resolvePayer(roomId, payerMemberId), purchasedAt);
         return detail(receipt);
     }
 
     @Transactional
     public ReceiptDetailResult saveContents(Long roomId, Long receiptId, Long userId, String name,
-        Long payerMemberId, Long declaredTotal, LocalDate purchasedAt, List<SaveItemCommand> commands) {
+        Long payerMemberId, LocalDate purchasedAt, List<SaveItemCommand> commands) {
         roomAuthorizationService.checkMemberForUpdate(roomId, userId);
         Receipt receipt = findReceiptInRoom(roomId, receiptId);
-        MoneyPolicy.declaredTotal(declaredTotal);
         RoomMember payer = resolvePayer(roomId, payerMemberId);
+        for (Item item : itemRepository.findAllByReceiptId(receiptId)) {
+            var command=commands.stream().filter(c->item.getId().equals(c.itemId())).findFirst().orElse(null);
+            if(command==null || !item.getName().equals(command.name().trim()) || item.getPrice()!=command.price() || item.getQuantity()!=command.quantity())
+                item.requireOcrEditor(userId);
+        }
         validateCommands(roomId, receiptId, commands);
-        receipt.update(name.trim(), payer, declaredTotal, purchasedAt);
+        receipt.update(name.trim(), payer, purchasedAt);
         replaceItems(roomId, receipt, commands);
         return detail(receipt);
     }
@@ -146,6 +156,7 @@ public class ReceiptService {
     public void deleteReceipt(Long roomId, Long receiptId, Long userId) {
         roomAuthorizationService.checkMemberForUpdate(roomId, userId);
         Receipt receipt = findReceiptInRoom(roomId, receiptId);
+        ocrQuotas.releaseUncalledForReceipts(List.of(receiptId));
         receiptImageRepository.findAllByReceiptId(receiptId)
             .forEach(image -> storageCleanupService.deleteAfterCommit(image.getStoredPath()));
         receiptImageRepository.deleteAllByReceiptId(receiptId);
@@ -172,29 +183,24 @@ public class ReceiptService {
         List<Long> ids = items.stream().map(Item::getId).toList();
         Map<Long,List<Long>> memberIds = ids.isEmpty() ? Map.of() : assignmentRepository.findAllByItemIdIn(ids).stream()
             .collect(Collectors.groupingBy(a -> a.getItem().getId(), Collectors.mapping(a -> a.getRoomMember().getId(), Collectors.toList())));
-        long total = 0;
-        String warning = null;
-        try {
-            for (Item item : items) total = Math.addExact(total, Math.multiplyExact(item.getPrice(), (long) item.getQuantity()));
-            if (receipt.getDeclaredTotal() != null && receipt.getDeclaredTotal() != total) {
-                warning = "검토 필요: 입력한 총액(" + receipt.getDeclaredTotal() + ")과 품목 합계(" + total + ")가 다릅니다.";
-            }
-        } catch (ArithmeticException exception) {
-            warning = "검토 필요: 기존 품목 금액이 계산 범위를 초과합니다. 단가·수량을 수정해 주세요.";
-        }
         return new ReceiptDetailResult(receipt.getId(), receipt.getRoom().getId(), receipt.getName(), receipt.getSourceType(),
             receipt.getPayer() == null ? null : receipt.getPayer().getId(),
-            receipt.getPayer() == null ? null : receipt.getPayer().getDisplayName(), receipt.getDeclaredTotal(),
+            receipt.getPayer() == null ? null : receipt.getPayer().getDisplayName(), itemsTotal(items),
             receipt.getPurchasedAt(), receipt.getCreatedAt(), items.stream().map(item -> new ReceiptItemResult(item.getId(),
                 item.getName(), item.getPrice(), item.getQuantity(), item.isExcludedFromSettlement(),
-                memberIds.getOrDefault(item.getId(), List.of()).stream().sorted().toList())).toList(), warning);
+                memberIds.getOrDefault(item.getId(), List.of()).stream().sorted().toList())).toList());
     }
 
-    private String fingerprint(String name, Long payerMemberId, Long declaredTotal, LocalDate purchasedAt, List<SaveItemCommand> items) {
+    private static BigInteger itemsTotal(List<Item> items) {
+        return items.stream().map(item -> BigInteger.valueOf(item.getPrice())
+            .multiply(BigInteger.valueOf(item.getQuantity()))).reduce(BigInteger.ZERO, BigInteger::add);
+    }
+
+    private String fingerprint(String name, Long payerMemberId, LocalDate purchasedAt, List<SaveItemCommand> items) {
         try {
             var normalized = items.stream().map(item -> new SaveItemCommand(item.itemId(), item.name().trim(), item.price(),
                 item.quantity(), item.memberIds().stream().distinct().sorted().toList(), item.excludedFromSettlement())).toList();
-            byte[] bytes = objectMapper.writeValueAsBytes(Arrays.asList(name.trim(), payerMemberId, declaredTotal, purchasedAt, normalized));
+            byte[] bytes = objectMapper.writeValueAsBytes(Arrays.asList(name.trim(), payerMemberId, purchasedAt, normalized));
             return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(bytes));
         } catch (IOException | NoSuchAlgorithmException e) {
             throw new IllegalStateException("Cannot identify receipt creation", e);
@@ -205,8 +211,8 @@ public class ReceiptService {
 
     public record SaveItemCommand(Long itemId, String name, long price, int quantity, List<Long> memberIds, boolean excludedFromSettlement) { }
     public record ReceiptDetailResult(Long receiptId, Long roomId, String name, ReceiptSourceType sourceType,
-        Long payerMemberId, String payerNickname, Long declaredTotal, LocalDate purchasedAt, LocalDateTime createdAt,
-        List<ReceiptItemResult> items, String warning) { }
+        Long payerMemberId, String payerNickname, BigInteger itemsTotal, LocalDate purchasedAt, LocalDateTime createdAt,
+        List<ReceiptItemResult> items) { }
     public record ReceiptItemResult(Long itemId, String name, long price, int quantity, boolean excludedFromSettlement, List<Long> memberIds) { }
 
 	public record ReceiptSummaryResult(
@@ -216,12 +222,12 @@ public class ReceiptService {
 		ReceiptSourceType sourceType,
 		Long payerMemberId,
 		String payerNickname,
-		Long declaredTotal,
+		BigInteger itemsTotal,
 		LocalDate purchasedAt,
 		LocalDateTime createdAt
 	) {
 
-		private static ReceiptSummaryResult from(Receipt receipt) {
+		private static ReceiptSummaryResult from(Receipt receipt, BigInteger itemsTotal) {
 			return new ReceiptSummaryResult(
 				receipt.getId(),
 				receipt.getRoom().getId(),
@@ -229,7 +235,7 @@ public class ReceiptService {
 				receipt.getSourceType(),
 				receipt.getPayer() != null ? receipt.getPayer().getId() : null,
 				receipt.getPayer() != null ? receipt.getPayer().getDisplayName() : null,
-				receipt.getDeclaredTotal(),
+				itemsTotal,
 				receipt.getPurchasedAt(),
 				receipt.getCreatedAt()
 			);

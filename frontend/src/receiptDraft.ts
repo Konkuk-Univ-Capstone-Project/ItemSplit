@@ -12,7 +12,6 @@ export type DraftItem = {
 export type ReceiptDraft = {
   name: string;
   payerMemberId: string;
-  declaredTotal: string;
   purchasedAt: string;
   items: DraftItem[];
 };
@@ -55,7 +54,6 @@ export function normalizeReceiptDraft(draft: ReceiptDraft) {
       memberIds: [...new Set(item.memberIds)], excludedFromSettlement: item.excludedFromSettlement };
   });
   return { name: draft.name.trim(), payerMemberId: draft.payerMemberId ? Number(draft.payerMemberId) : null,
-    declaredTotal: draft.declaredTotal.trim() ? boundedInteger(draft.declaredTotal, 10_000_000, '원본 총액') : null,
     purchasedAt: draft.purchasedAt || null, items };
 }
 

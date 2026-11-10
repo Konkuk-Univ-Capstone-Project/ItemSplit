@@ -22,6 +22,13 @@ import org.springframework.web.multipart.MultipartFile;
 public class ReceiptController {
     private final ReceiptService receiptService;
     private final ReceiptImageService receiptImageService;
+    private final ReceiptImageQueryService imageQueryService;
+
+    @GetMapping("/{receiptId}/images")
+    public ResponseEntity<ApiResponse<List<ReceiptImageQueryService.ImageView>>> images(@PathVariable Long roomId,
+        @PathVariable Long receiptId,@AuthenticationPrincipal AuthenticatedUser user) {
+        return ResponseEntity.ok().header("Cache-Control","no-store").body(ApiResponse.success(imageQueryService.list(roomId,receiptId,userId(user))));
+    }
 
     @GetMapping
     public ApiResponse<List<ReceiptService.ReceiptSummaryResult>> getReceipts(@PathVariable Long roomId,
@@ -55,7 +62,7 @@ public class ReceiptController {
     public ResponseEntity<ApiResponse<ReceiptService.ReceiptDetailResult>> createManualReceipt(@PathVariable Long roomId,
         @AuthenticationPrincipal AuthenticatedUser user, @Valid @RequestBody CreateManualReceiptRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.success(receiptService.createManualReceipt(
-            roomId, userId(user), request.requestId(), request.name(), request.payerMemberId(), request.declaredTotal(),
+            roomId, userId(user), request.requestId(), request.name(), request.payerMemberId(),
             request.purchasedAt(), request.items().stream().map(SaveItemRequest::command).toList())));
     }
 
@@ -63,14 +70,14 @@ public class ReceiptController {
     public ApiResponse<ReceiptService.ReceiptDetailResult> updateReceipt(@PathVariable Long roomId, @PathVariable Long receiptId,
         @AuthenticationPrincipal AuthenticatedUser user, @Valid @RequestBody UpdateReceiptRequest request) {
         return ApiResponse.success(receiptService.updateReceipt(roomId, receiptId, userId(user), request.name(),
-            request.payerMemberId(), request.declaredTotal(), request.purchasedAt()));
+            request.payerMemberId(), request.purchasedAt()));
     }
 
     @PutMapping("/{receiptId}/contents")
     public ApiResponse<ReceiptService.ReceiptDetailResult> saveContents(@PathVariable Long roomId, @PathVariable Long receiptId,
         @AuthenticationPrincipal AuthenticatedUser user, @Valid @RequestBody SaveContentsRequest request) {
         return ApiResponse.success(receiptService.saveContents(roomId, receiptId, userId(user), request.name(),
-            request.payerMemberId(), request.declaredTotal(), request.purchasedAt(),
+            request.payerMemberId(), request.purchasedAt(),
             request.items().stream().map(SaveItemRequest::command).toList()));
     }
 
@@ -90,7 +97,6 @@ public class ReceiptController {
         @NotBlank @Size(max = 64) String requestId,
         @NotBlank @Size(max = 100) String name,
         Long payerMemberId,
-        @Positive @Max(10_000_000) Long declaredTotal,
         LocalDate purchasedAt,
         @NotEmpty List<@NotNull @Valid SaveItemRequest> items
     ) { }
@@ -98,7 +104,6 @@ public class ReceiptController {
     public record SaveContentsRequest(
         @NotBlank @Size(max = 100) String name,
         Long payerMemberId,
-        @Positive @Max(10_000_000) Long declaredTotal,
         LocalDate purchasedAt,
         @NotEmpty List<@NotNull @Valid SaveItemRequest> items
     ) { }
@@ -119,7 +124,6 @@ public class ReceiptController {
     public record UpdateReceiptRequest(
         @NotBlank @Size(max = 100) String name,
         Long payerMemberId,
-        @Positive @Max(10_000_000) Long declaredTotal,
         LocalDate purchasedAt
     ) { }
 }

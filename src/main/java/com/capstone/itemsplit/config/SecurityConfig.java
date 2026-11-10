@@ -32,7 +32,7 @@ public class SecurityConfig {
 				.accessDeniedHandler(restAccessDeniedHandler)
 			)
 			.authorizeHttpRequests(authorize -> authorize
-				.requestMatchers(HttpMethod.GET, "/api/shared/**")
+				.requestMatchers(HttpMethod.GET, "/api/shared/**", "/api/storage/local/**")
 				.permitAll()
 				.requestMatchers(
 					"/actuator/health",

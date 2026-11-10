@@ -34,6 +34,7 @@ class CommonReceiptContractTest {
     @Autowired ItemRepository items;
     @Autowired AssignmentRepository assignments;
     @Autowired ReceiptService service;
+    @Autowired org.springframework.jdbc.core.JdbcTemplate jdbc;
     User owner;
     Room room;
     RoomMember member;
@@ -55,8 +56,30 @@ class CommonReceiptContractTest {
     }
     Map<String,Object> payload(List<Map<String,Object>> rows) {
         Map<String,Object> p = new HashMap<>();
-        p.put("name", "receipt"); p.put("payerMemberId", member.getId()); p.put("declaredTotal", 1000);
+        p.put("name", "receipt"); p.put("payerMemberId", member.getId());
         p.put("items", rows); p.put("requestId", UUID.randomUUID().toString()); return p;
+    }
+
+    @ParameterizedTest
+    @CsvSource({"0", "-1", "9999", "10000001"})
+    void legacyTotalDoesNotAffectReceiptContractOrSettlement(long legacyTotal) throws Exception {
+        var p = payload(List.of(row(null,1000,1,List.of(member.getId()),false)));
+        var response = mvc.perform(post(base()+"/manual").header("Authorization",token)
+            .contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(p)))
+            .andExpect(status().isCreated()).andReturn();
+        long id = json.readTree(response.getResponse().getContentAsString()).at("/data/receiptId").asLong();
+        jdbc.execute("alter table receipts add column if not exists declared_total bigint");
+        jdbc.update("update receipts set declared_total=? where id=?", legacyTotal, id);
+        mvc.perform(get(base()+"/"+id).header("Authorization",token))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.data.declaredTotal").doesNotHaveJsonPath())
+            .andExpect(jsonPath("$.data.warning").doesNotHaveJsonPath())
+            .andExpect(jsonPath("$.data.itemsTotal").value(1000));
+        mvc.perform(get(base()).header("Authorization",token))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.data[0].declaredTotal").doesNotHaveJsonPath());
+        mvc.perform(get("/api/rooms/"+room.getId()+"/settlements").header("Authorization",token))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.data.ready").value(true))
+            .andExpect(jsonPath("$.data.members[0].paid").value(1000));
     }
 
     @ParameterizedTest
@@ -81,7 +104,7 @@ class CommonReceiptContractTest {
             .content(json.writeValueAsString(payload(List.of(row(null,1000000,10,List.of(),false),row(null,1,1,List.of(),false))))))
             .andExpect(status().isBadRequest());
         for(int i=0;i<10;i++) {
-            Receipt r = receipts.save(Receipt.createManual(room,"full",null,null,null));
+            Receipt r = receipts.save(Receipt.createManual(room,"full",null,null));
             items.save(Item.create(r,"line",1000000,10));
         }
         mvc.perform(post(base()+"/manual").header("Authorization",token).contentType(MediaType.APPLICATION_JSON)
@@ -104,7 +127,7 @@ class CommonReceiptContractTest {
     }
 
     @Test void atomicSavePreservesIdsAndRollsBackAllOnInvalidMember() throws Exception {
-        Receipt receipt=receipts.save(Receipt.createManual(room,"original",member,null,null));
+        Receipt receipt=receipts.save(Receipt.createManual(room,"original",member,null));
         Item item=items.save(Item.create(receipt,"meal",1000,1));
         assignments.save(Assignment.create(item,member));
         var p=payload(List.of(row(item.getId(),2000,1,List.of(member.getId()),false),row(null,1000,1,List.of(Long.MAX_VALUE),false)));
@@ -121,7 +144,7 @@ class CommonReceiptContractTest {
     }
 
     @Test void explicitExclusionClearsAssignmentsAndOmittedItemIsDeleted() throws Exception {
-        Receipt receipt=receipts.save(Receipt.createManual(room,"original",member,null,null));
+        Receipt receipt=receipts.save(Receipt.createManual(room,"original",member,null));
         Item item=items.save(Item.create(receipt,"meal",1000,1));
         Item removed=items.save(Item.create(receipt,"remove",500,1));
         assignments.save(Assignment.create(item,member)); assignments.save(Assignment.create(removed,member));
@@ -139,17 +162,17 @@ class CommonReceiptContractTest {
         assertThat(receipts.count()).isZero();
     }
 
-    @Test void legacyOverflowIsReportedWithoutWrappedTotal() throws Exception {
-        Receipt receipt=receipts.save(Receipt.createManual(room,"legacy",member,1L,null));
+    @Test void legacyOverflowCanBeReadWithoutWrappedTotal() throws Exception {
+        Receipt receipt=receipts.save(Receipt.createManual(room,"legacy",member,null));
         items.save(Item.create(receipt,"overflow",Long.MAX_VALUE,2));
         mvc.perform(get(base()+"/"+receipt.getId()).header("Authorization",token))
-            .andExpect(status().isOk()).andExpect(jsonPath("$.data.warning").value(org.hamcrest.Matchers.containsString("계산 범위")));
+            .andExpect(status().isOk()).andExpect(jsonPath("$.data.warning").doesNotHaveJsonPath());
     }
 
     @Test void rejectsForeignOrDuplicateItemIdsWithoutDeletingOriginal() throws Exception {
-        Receipt receipt=receipts.save(Receipt.createManual(room,"original",member,null,null));
+        Receipt receipt=receipts.save(Receipt.createManual(room,"original",member,null));
         Item item=items.save(Item.create(receipt,"meal",1000,1));
-        Receipt other=receipts.save(Receipt.createManual(room,"other",member,null,null));
+        Receipt other=receipts.save(Receipt.createManual(room,"other",member,null));
         Item foreign=items.save(Item.create(other,"foreign",1000,1));
         for(var rows: List.of(List.of(row(foreign.getId(),1000,1,List.of(),false)),
                 List.of(row(item.getId(),1000,1,List.of(),false),row(item.getId(),1000,1,List.of(),false)))) {
@@ -161,7 +184,7 @@ class CommonReceiptContractTest {
     }
 
     @Test void exactCapsAllowedAndExcludedItemsCannotBypassCaps() throws Exception {
-        var p=payload(List.of(row(null,1000000,10,List.of(),true))); p.put("declaredTotal",10000000);
+        var p=payload(List.of(row(null,1000000,10,List.of(),true)));
         mvc.perform(post(base()+"/manual").header("Authorization",token).contentType(MediaType.APPLICATION_JSON)
             .content(json.writeValueAsString(p))).andExpect(status().isCreated());
         p=payload(List.of(row(null,1000000,10,List.of(),true),row(null,1,1,List.of(),true)));
@@ -176,7 +199,7 @@ class CommonReceiptContractTest {
         try(var pool=java.util.concurrent.Executors.newFixedThreadPool(2)) {
             java.util.concurrent.Callable<Long> create=() -> {
                 start.await();
-                return service.createManualReceipt(room.getId(),owner.getId(),"same-create","receipt",member.getId(),1000L,null,commands).receiptId();
+                return service.createManualReceipt(room.getId(),owner.getId(),"same-create","receipt",member.getId(),null,commands).receiptId();
             };
             var first=pool.submit(create); var second=pool.submit(create); start.countDown();
             assertThat(first.get(10,java.util.concurrent.TimeUnit.SECONDS)).isEqualTo(second.get(10,java.util.concurrent.TimeUnit.SECONDS));
@@ -186,7 +209,7 @@ class CommonReceiptContractTest {
 
     @Test void concurrentCreatesCannotExceedRoomCap() throws Exception {
         for(int i=0;i<10;i++) {
-            Receipt receipt=receipts.save(Receipt.createManual(room,"seed",member,null,null));
+            Receipt receipt=receipts.save(Receipt.createManual(room,"seed",member,null));
             items.save(Item.create(receipt,"line",i==9?900000:1000000,10));
         }
         var start=new java.util.concurrent.CountDownLatch(1);
@@ -194,7 +217,7 @@ class CommonReceiptContractTest {
             java.util.concurrent.Callable<Boolean> create=() -> {
                 start.await();
                 try {
-                    service.createManualReceipt(room.getId(),owner.getId(),UUID.randomUUID().toString(),"new",member.getId(),600000L,null,
+                    service.createManualReceipt(room.getId(),owner.getId(),UUID.randomUUID().toString(),"new",member.getId(),null,
                         List.of(new ReceiptService.SaveItemCommand(null,"meal",600000,1,List.of(),false)));
                     return true;
                 } catch(com.capstone.itemsplit.common.exception.ApiException exception) {
