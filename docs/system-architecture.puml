@@ -37,12 +37,14 @@ node "Docker Compose" as Compose {
     package "서비스" {
       component "업무 서비스\nAuth / Room / Receipt / Item\nAssignment / Settlement\n방 권한 · 금액 검증" as Core
       component "OcrService / OcrDraftService\n작업 요청·조회 · 초안 저장·반영\n작성자 권한 · 버전 검사 · 중복 방지" as Ocr
+      component "OcrQuotaService\nOCR 일일 호출 한도\n사용량 예약 · 미호출 예약 반환" as Quota
       component "OcrWorker\n커밋 후 이벤트 → 스레드풀 실행\n작업·이미지 상태 / 오류 관리" as Worker
       component "ClovaReceiptOcrEngine\nHttpClovaTransport\n응답 파싱" as Engine
     }
 
     package "이미지 저장·조회" {
       component "StorageService\nLocalStorageService 또는 S3StorageService\n파일 저장·읽기·삭제" as Storage
+      component "StorageCleanupService\nDB 커밋 후 삭제 · 업로드 롤백 시 정리\n시작 시 및 60초 간격 삭제 재시도" as Cleanup
       component "StorageReadUrls\n로컬 HMAC / S3 Presigned URL 발급" as ReadUrls
       component "LocalImageController\n서명·만료 검증 후 원본 응답" as LocalImage
     }
@@ -69,17 +71,25 @@ Controllers --> Core
 Controllers --> Ocr
 
 Core --> Persistence
-Core --> Storage : 영수증 이미지 저장·삭제
+Core --> Storage : 영수증 이미지 저장
+Core --> Cleanup : 이미지 삭제·롤백 정리 요청
+Core --> Quota : 영수증·방 삭제 시\n미호출 예약 반환
 Core --> ReadUrls : 방 멤버 확인 후\n이미지 URL 발급
 Ocr --> Persistence : 작업·초안 저장\n확정 품목·참여자 배정 반영
 Ocr ..> Worker : AFTER_COMMIT 이벤트
+Ocr --> Quota : 시작·재시도 시 사용량 예약
+Worker --> Quota : 호출 전 실패·중단 시\n미호출 예약 반환
 Worker --> Persistence : 인식 상태·초안 저장
 Worker --> Storage : ReceiptImageReader\n저장된 파일 읽기
 Worker --> Engine : 이미지 바이트 전달
 Engine --> Clova : HTTPS multipart\n서버 인증 키
 
 Persistence --> PostgreSQL : JDBC
+Quota --> Persistence : 사진별 예약 상태 조회·변경
+Quota --> PostgreSQL : JdbcTemplate · 조건부 SQL\nocr_daily_usage 갱신
 Flyway --> PostgreSQL : 버전별 SQL 적용
+Cleanup --> Storage : 파일·객체 삭제
+Cleanup --> LocalStorage : local/S3 공통\n삭제 재시도 기록 (.cleanup-pending)
 Storage --> LocalStorage : STORAGE_TYPE=local
 Storage --> S3 : STORAGE_TYPE=s3\nAWS SDK
 LocalImage --> Storage : 로컬 원본 읽기

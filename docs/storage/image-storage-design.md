@@ -59,17 +59,23 @@ DB의 `sort_order`는 최댓값 + 1로 부여하고 삭제 후 다시 매기지 
 
 이미지 목록 API에서 JWT 권한을 확인하며, `<img src>`의 파일 요청은 단기 서명으로 보호한다. 로컬 URL 서명 키는 JWT 키와 분리한다. URL이 만료되면 화면은 이미지 목록을 다시 조회한다. 서명 URL·이미지 바이트는 일반 로그에 남기지 않는다.
 
-저장소 인터페이스는 기존 저장·삭제에 조회 URL 생성과 OCR용 읽기를 추가한다.
+파일 저장·읽기·삭제는 `StorageService`, 서명 URL 발급은 별도 `StorageReadUrls`가 담당한다. 두 인터페이스의 구현체는 같은 `app.storage.type` 설정을 따른다. 이미지 목록 서비스가 방 멤버 권한을 확인한 뒤 URL을 발급하며, OCR 작업은 URL 발급 없이 저장소에서 바이트를 읽는다.
 
 ```java
 public interface StorageService {
-    StoredFile store(String directory, MultipartFile file) throws IOException;
+    StoredFile store(String directory, MultipartFile file, String extension, String contentType) throws IOException;
     void delete(String storedPath) throws IOException;
-    SignedUrl createReadUrl(String storedPath, Duration ttl);
     byte[] read(String storedPath) throws IOException;
+    record StoredFile(String storedPath, String originalFilename, String contentType, long size) { }
+}
+
+public interface StorageReadUrls {
+    SignedUrl create(String key);
     record SignedUrl(String url, Instant expiresAt) { }
 }
 ```
+
+`LocalReadUrls`는 HMAC 서명 URL을, `S3ReadUrls`는 `S3Presigner`로 presigned GET URL을 발급한다. 현재 두 구현체의 유효 시간은 5분이다.
 
 클라이언트가 외부 URL이나 객체 키를 지정해 OCR을 호출하게 하지 않는다. 이미지는 `imageId`로 식별하고 서버가 저장된 키를 조회한다. 한 장 최대 10MB이므로 OCR은 바이트 배열로 읽는다.
 
