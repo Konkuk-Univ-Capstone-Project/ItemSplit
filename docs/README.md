@@ -6,6 +6,8 @@ PR #16 이후의 S3·OCR 설계 보고서 5개에서 현재 채택한 내용을 
 
 | 문서 | 역할 |
 |---|---|
+| [두 개발자 공통 개발 계약](development-handoff.md) | 공통 HTTP 모듈, 편집 제한 호출 규약, 정산·방 목록 API/화면, 역할·통합 기준. 구현/예약 상태를 구분 |
+| [DB 마이그레이션 버전 예약표](database-migration-reservations.md) | 개발자 2의 V3·개발자 1의 V4 배정, 개인 DB와 공유 DB의 적용 순서 |
 | [OCR 상태·DB·API 최종 설계](ocr/state-db-api-design.md) | OCR 작업·초안·반영·권한·수정 요청·품목 이동·정산 정책의 기준 |
 | [OCR 추출·수정 화면 요구사항](ocr/ocr-extraction-review-requirements.md) | 최종 설계를 사용하는 화면 표시·검토·편집·오류 안내 |
 | [CLOVA OCR 연동 설계](ocr/clova-ocr-integration-design.md) | 공급자 호출·응답 매핑·오류 처리·연동 검증 |
