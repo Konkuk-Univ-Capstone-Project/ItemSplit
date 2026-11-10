@@ -207,6 +207,16 @@ npm run build
 
 운영 프로파일도 로컬과 같이 Flyway 적용 후 `ddl-auto=validate`로 동작합니다.
 
+### 정산 확정 API 개발 설정
+
+현재는 확정본 데이터 구조와 미리보기·확정·상태·확정본 조회 API까지 구현되어 있습니다. 편집 제한은 후속 단계이므로 새 API는 기본 비활성화입니다. 별도 개발 DB에서 `SETTLEMENT_SNAPSHOTS_ENABLED=true` 또는 아래 인자로 활성화합니다(Java 21 필요).
+
+```sh
+./gradlew bootRun --args='--spring.profiles.active=local --app.settlement.snapshots.enabled=true'
+```
+
+모든 입력 변경 경로에 편집 제한을 연결하기 전에는 운영에서 활성화하지 않습니다. 이 설정은 API 노출만 제어하며 Flyway 실행을 끄지 않습니다. 실행 전에 [DB 적용 순서와 주의사항](docs/database-migration-reservations.md#독립-개발과-통합-적용-순서)을 확인합니다. 구현 상태와 후속 작업은 [공통 개발 계약](docs/development-handoff.md)을 따릅니다.
+
 ### 이미지 저장소
 
 - 영수증 이미지는 JPEG·PNG만 받으며 파일 내용으로 형식을 확인합니다. 한 장에 10MB, 영수증 하나에 3장까지입니다.

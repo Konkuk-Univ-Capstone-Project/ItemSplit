@@ -34,6 +34,10 @@ info:
     name: ${spring.application.name}
 
 app:
+  settlement:
+    snapshots:
+      # Enable only after stage-2 edit protection is integrated.
+      enabled: ${SETTLEMENT_SNAPSHOTS_ENABLED:false}
   ocr:
     max-attempts: 3
     limit:

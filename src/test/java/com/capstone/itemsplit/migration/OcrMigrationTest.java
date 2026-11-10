@@ -32,7 +32,7 @@ class OcrMigrationTest {
                 INSERT INTO ocr_draft_items(draft_id,image_id,row_index,sort_order) SELECT 1,id,1,1 FROM receipt_images WHERE receipt_id=1;
 
                 """);
-            assertThat(flyway.migrate().migrationsExecuted).isEqualTo(1);
+            assertThat(flyway.migrate().migrationsExecuted).isEqualTo(2);
             assertThat(flyway.migrate().migrationsExecuted).isZero();
             try (var result=sql.executeQuery("SELECT quota_date, quota_reserved, quota_invoked FROM ocr_job_images")) {
                 assertThat(result.next()).isTrue();
