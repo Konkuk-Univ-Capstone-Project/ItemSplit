@@ -209,13 +209,15 @@ npm run build
 
 ### 정산 확정 API 개발 설정
 
-현재는 확정본 데이터 구조와 미리보기·확정·상태·확정본 조회 API까지 구현되어 있습니다. 편집 제한은 후속 단계이므로 새 API는 기본 비활성화입니다. 별도 개발 DB에서 `SETTLEMENT_SNAPSHOTS_ENABLED=true` 또는 아래 인자로 활성화합니다(Java 21 필요).
+확정본 저장·조회 API와 확정 화면·편집 제한·재개방을 구현했습니다. 새 API는 기본 비활성화이며, 별도 개발 DB에서 `SETTLEMENT_SNAPSHOTS_ENABLED=true` 또는 아래 인자로 활성화합니다(Java 21 필요).
 
 ```sh
 ./gradlew bootRun --args='--spring.profiles.active=local --app.settlement.snapshots.enabled=true'
 ```
 
-모든 입력 변경 경로에 편집 제한을 연결하기 전에는 운영에서 활성화하지 않습니다. 이 설정은 API 노출만 제어하며 Flyway 실행을 끄지 않습니다. 실행 전에 [DB 적용 순서와 주의사항](docs/database-migration-reservations.md#독립-개발과-통합-적용-순서)을 확인합니다. 구현 상태와 후속 작업은 [공통 개발 계약](docs/development-handoff.md)을 따릅니다.
+활성화하면 정산 화면에서 미리보기를 확인하고 방장이 확정·재개방할 수 있습니다. 확정된 방은 영수증·품목·배정·멤버·OCR 입력 변경과 방 삭제를 제한합니다. 재개방 후 수정·재확정하면 이전 기록을 보존한 새 버전을 만듭니다. 송금 완료 표시와 확정본 공유 화면은 후속 단계입니다.
+
+이 설정은 API 노출만 제어하며 Flyway 실행을 끄지 않습니다. 설정을 다시 꺼도 이미 확정된 방의 서버 편집 제한은 유지됩니다. 재개방하려면 API를 다시 활성화해야 합니다. 공유·운영 DB 적용과 활성화는 개발자 2의 V3 및 멤버 연결 변경을 통합·검증한 후 진행합니다. 실행 전에 [DB 적용 순서와 주의사항](docs/database-migration-reservations.md#독립-개발과-통합-적용-순서)을 확인합니다. 구현 상태와 후속 작업은 [공통 개발 계약](docs/development-handoff.md)을 따릅니다.
 
 ### 이미지 저장소
 

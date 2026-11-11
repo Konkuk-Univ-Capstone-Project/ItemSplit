@@ -25,6 +25,7 @@ public class ReceiptImageService {
 
     static final int MAX_IMAGES_PER_RECEIPT = 3;
 
+    private final com.capstone.itemsplit.settlement.RoomEditGuard roomEditGuard;
     private final ReceiptRepository receiptRepository;
     private final ReceiptImageRepository receiptImageRepository;
     private final RoomMemberRepository roomMemberRepository;
@@ -40,7 +41,8 @@ public class ReceiptImageService {
         RoomAuthorizationService roomAuthorizationService, StorageService storageService,
         StorageCleanupService storageCleanupService,
         @Value("${spring.servlet.multipart.max-file-size}") DataSize maxImageSize,
-        com.capstone.itemsplit.ocr.OcrJobRepository ocrJobs) {
+        com.capstone.itemsplit.ocr.OcrJobRepository ocrJobs, com.capstone.itemsplit.settlement.RoomEditGuard roomEditGuard) {
+        this.roomEditGuard = roomEditGuard;
         this.receiptRepository = receiptRepository;
         this.receiptImageRepository = receiptImageRepository;
         this.roomMemberRepository = roomMemberRepository;
@@ -56,6 +58,7 @@ public class ReceiptImageService {
     @Transactional
     public UploadReceiptImageResult createReceiptWithImage(Long roomId, Long userId, MultipartFile file, String name) {
         Room room = roomAuthorizationService.checkMemberForUpdate(roomId, userId);
+        roomEditGuard.requireEditable(room);
         ReceiptImageFormat format = validate(file);
         StorageService.StoredFile stored = store(roomId, file, format);
 
@@ -69,7 +72,7 @@ public class ReceiptImageService {
 
     @Transactional
     public ReceiptImageResult addImage(Long roomId, Long receiptId, Long userId, MultipartFile file) {
-        roomAuthorizationService.checkMemberForUpdate(roomId, userId);
+        Room room = roomAuthorizationService.checkMemberForUpdate(roomId, userId);
         Receipt receipt = receiptRepository.findByIdAndRoomId(receiptId, roomId)
             .orElseThrow(() -> new ApiException(ErrorCode.NOT_FOUND, "Receipt was not found."));
         if (receipt.getSourceType() != ReceiptSourceType.IMAGE_UPLOAD) {
@@ -79,6 +82,7 @@ public class ReceiptImageService {
         if (receipt.getCreatedBy() != null && !receipt.getCreatedBy().getId().equals(userId)) {
             throw new ApiException(ErrorCode.FORBIDDEN, "영수증을 올린 사람만 이미지를 추가할 수 있습니다.");
         }
+        roomEditGuard.requireEditable(room);
         // OCR start takes this same room lock; no upload can race the job's image snapshot.
         if (ocrJobs.existsByReceiptId(receiptId)) {
             throw new ApiException(ErrorCode.CONFLICT, "인식을 시작한 영수증에는 이미지를 추가할 수 없습니다.");

@@ -18,6 +18,7 @@ import org.springframework.transaction.annotation.Transactional;
 @Transactional(readOnly = true)
 public class ItemService {
 
+    private final com.capstone.itemsplit.settlement.RoomEditGuard roomEditGuard;
 	private final ItemRepository itemRepository;
 	private final ReceiptAmountValidator amountValidator;
 	private final ReceiptRepository receiptRepository;
@@ -33,7 +34,7 @@ public class ItemService {
 		long price,
 		int quantity
 	) {
-		roomAuthorizationService.checkMemberForUpdate(roomId, userId);
+		roomEditGuard.requireEditable(roomAuthorizationService.checkMemberForUpdate(roomId, userId));
 		Receipt receipt = findReceiptInRoom(roomId, receiptId);
 		long total = MoneyPolicy.addWithin(amountValidator.total(itemRepository.findAllByReceiptId(receiptId)),
             MoneyPolicy.itemTotal(price, quantity), MoneyPolicy.RECEIPT_MAX, "영수증 품목 합계는 10,000,000원을 넘을 수 없습니다.");
@@ -52,9 +53,10 @@ public class ItemService {
 		long price,
 		int quantity
 	) {
-		roomAuthorizationService.checkMemberForUpdate(roomId, userId);
+		var room = roomAuthorizationService.checkMemberForUpdate(roomId, userId);
 		Item item = findItemInReceipt(roomId, receiptId, itemId);
         item.requireOcrEditor(userId);
+        roomEditGuard.requireEditable(room);
 		long otherTotal = amountValidator.total(itemRepository.findAllByReceiptId(receiptId).stream()
             .filter(existing -> !existing.getId().equals(itemId)).toList());
         long total = MoneyPolicy.addWithin(otherTotal, MoneyPolicy.itemTotal(price, quantity), MoneyPolicy.RECEIPT_MAX,
@@ -66,8 +68,9 @@ public class ItemService {
 
 	@Transactional
 	public void deleteItem(Long roomId, Long receiptId, Long itemId, Long userId) {
-		roomAuthorizationService.checkMemberForUpdate(roomId, userId);
+		var room = roomAuthorizationService.checkMemberForUpdate(roomId, userId);
 		findItemInReceipt(roomId, receiptId, itemId).requireOcrEditor(userId);
+        roomEditGuard.requireEditable(room);
 		assignmentRepository.deleteAllByItemIdIn(List.of(itemId));
 		itemRepository.deleteById(itemId);
 	}

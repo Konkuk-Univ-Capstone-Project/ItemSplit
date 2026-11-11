@@ -17,6 +17,7 @@ import java.util.Objects;
 public class OcrService {
     private final RoomAuthorizationService authorization;
     private final ReceiptRepository receipts;
+    private final com.capstone.itemsplit.settlement.RoomEditGuard roomEditGuard;
     private final ReceiptImageRepository images;
     private final OcrJobRepository jobs;
     private final OcrJobImageRepository jobImages;
@@ -28,9 +29,10 @@ public class OcrService {
     @Value("${app.ocr.max-attempts:3}") private int maxAttempts;
 
     public OcrViews.JobView start(Long roomId,Long receiptId,Long userId,String requestId) {
-        authorization.checkMemberForUpdate(roomId,userId);
+        var room=authorization.checkMemberForUpdate(roomId,userId);
         Receipt receipt=receipt(roomId,receiptId);
         owner(receipt,userId);
+        roomEditGuard.requireEditable(room);
         if(requestId==null || requestId.isBlank() || requestId.length()>64) throw invalid("유효한 requestId를 입력해 주세요.");
         if(receipt.getSourceType()!=ReceiptSourceType.IMAGE_UPLOAD) throw invalid("이미지 영수증만 인식할 수 있습니다.");
         var existing=jobs.findByReceiptId(receiptId);
@@ -50,8 +52,9 @@ public class OcrService {
         return views.view(job);
     }
     public OcrViews.JobView retry(Long roomId,Long receiptId,Long jobId,Long imageId,Long userId) {
-        authorization.checkMemberForUpdate(roomId,userId);
+        var room=authorization.checkMemberForUpdate(roomId,userId);
         owner(receipt(roomId,receiptId),userId);
+        roomEditGuard.requireEditable(room);
         OcrJob job=job(receiptId,jobId);
         if(!drafts.findByJobId(jobId).orElseThrow().getStatus().equals("EDITING")) throw conflict("DRAFT_NOT_EDITABLE","이미 정산에 반영한 초안입니다.");
         OcrJobImage image=jobImages.findAllByJobIdOrderBySortOrder(jobId).stream()

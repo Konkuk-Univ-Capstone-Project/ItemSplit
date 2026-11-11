@@ -12,6 +12,6 @@ class SettlementSnapshotsDisabledTest {
         var paths=mappings.getHandlerMethods().keySet().stream().flatMap(m->m.getPatternValues().stream()).toList();
         assertThat(paths).contains("/api/rooms/{roomId}/settlements")
             .doesNotContain("/api/rooms/{roomId}/settlement-state","/api/rooms/{roomId}/settlements/confirmation-preview",
-                "/api/rooms/{roomId}/settlement-snapshots","/api/rooms/{roomId}/settlement-snapshots/{snapshotId}");
+                "/api/rooms/{roomId}/settlement-snapshots","/api/rooms/{roomId}/settlement-snapshots/{snapshotId}","/api/rooms/{roomId}/settlement-snapshots/{snapshotId}/reopen");
     }
 }

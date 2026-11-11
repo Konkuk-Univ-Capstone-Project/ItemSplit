@@ -104,9 +104,8 @@ class SettlementConfirmationApiTest {
         String token=preview().path("previewToken").asText();
         JsonNode original=data(confirm(owner,"original",token).andExpect(status().isCreated()));
         long id=original.path("snapshotId").asLong();
-        // Fixture simulates a future reopen transaction without exposing a stage-2 endpoint.
-        jdbc.update("update room_settlement_states set status='OPEN',current_snapshot_id=null where room_id=?",room.getId());
-        jdbc.update("update settlement_snapshots set status='REOPENED',reopened_by_user_id=?,reopened_at=CURRENT_TIMESTAMP where id=?",owner.getId(),id);
+        mvc.perform(post("/api/rooms/{room}/settlement-snapshots/{id}/reopen",room.getId(),id)
+            .header("Authorization",bearer(owner))).andExpect(status().isOk());
         JsonNode retry=data(confirm(owner,"original",token).andExpect(status().isOk()));
         assertThat(retry.path("snapshotId").asLong()).isEqualTo(id);
         assertThat(retry.path("status").asText()).isEqualTo("REOPENED");
@@ -175,6 +174,36 @@ class SettlementConfirmationApiTest {
         JsonNode ready=preview();
         assertThat(ready.path("ready").asBoolean()).isTrue();
         confirm(owner,"covered",ready.path("previewToken").asText()).andExpect(status().isCreated());
+    }
+    @Test void reopenReturnsOpenAndProtectsHistory() throws Exception {
+        long id=data(confirm(owner,"first",preview().path("previewToken").asText()).andExpect(status().isCreated())).path("snapshotId").asLong();
+        mvc.perform(post("/api/rooms/{room}/settlement-snapshots/{id}/reopen",room.getId(),id).header("Authorization",bearer(guest))).andExpect(status().isForbidden());
+        mvc.perform(post("/api/rooms/{room}/settlement-snapshots/{id}/reopen",room.getId(),id).header("Authorization",bearer(outsider))).andExpect(status().isForbidden());
+        mvc.perform(post("/api/rooms/{room}/settlement-snapshots/{id}/reopen",room.getId(),id)).andExpect(status().isUnauthorized());
+        Room other=rooms.save(Room.create("other",owner));members.save(RoomMember.create(other,owner));
+        mvc.perform(post("/api/rooms/{room}/settlement-snapshots/{id}/reopen",other.getId(),id).header("Authorization",bearer(owner))).andExpect(status().isNotFound());
+        jdbc.update("update settlement_transfers set status='COMPLETED',updated_by_user_id=?,updated_at=CURRENT_TIMESTAMP where snapshot_id=?",owner.getId(),id);
+        mvc.perform(post("/api/rooms/{room}/settlement-snapshots/{id}/reopen",room.getId(),id).header("Authorization",bearer(owner)))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.data.status").value("OPEN")).andExpect(jsonPath("$.data.currentSnapshotId").isEmpty());
+        JsonNode reopened=data(read("/settlement-snapshots/"+id,owner));
+        assertThat(reopened.path("status").asText()).isEqualTo("REOPENED");
+        assertThat(reopened.path("reopenedByUserId").asLong()).isEqualTo(owner.getId());
+        assertThat(java.time.LocalDateTime.parse(reopened.path("reopenedAt").asText()).getNano()%1000).isZero();
+        mvc.perform(post("/api/rooms/{room}/settlement-snapshots/{id}/reopen",room.getId(),id).header("Authorization",bearer(owner))).andExpect(status().isOk());
+        assertThat(data(read("/settlement-snapshots/"+id,owner))).isEqualTo(reopened);
+        assertThat(reopened.path("transfers").get(0).path("status").asText()).isEqualTo("COMPLETED");
+        JsonNode second=data(confirm(owner,"second",preview().path("previewToken").asText()).andExpect(status().isCreated()).andExpect(jsonPath("$.data.version").value(2)));
+        assertThat(second.path("transfers").get(0).path("status").asText()).isEqualTo("PENDING");
+        mvc.perform(post("/api/rooms/{room}/settlement-snapshots/{id}/reopen",room.getId(),id).header("Authorization",bearer(owner)))
+            .andExpect(status().isConflict()).andExpect(jsonPath("$.error.details[0].reason").value("SETTLEMENT_VERSION_CONFLICT"));
+        mvc.perform(post("/api/rooms/{room}/settlement-snapshots/{id}/reopen",room.getId(),second.path("snapshotId").asLong()).header("Authorization",bearer(owner))).andExpect(status().isOk());
+        mvc.perform(post("/api/rooms/{room}/settlement-snapshots/{id}/reopen",room.getId(),id).header("Authorization",bearer(owner))).andExpect(status().isConflict());
+        assertThat(data(read("/settlement-snapshots/"+id,owner))).isEqualTo(reopened);
+    }
+    @Test void confirmedReceiptDeletionIsStructuredConflict() throws Exception {
+        confirm(owner,"first",preview().path("previewToken").asText()).andExpect(status().isCreated());
+        mvc.perform(delete("/api/rooms/{room}/receipts/{receipt}",room.getId(),receipt.getId()).header("Authorization",bearer(owner)))
+            .andExpect(status().isConflict()).andExpect(jsonPath("$.error.details[0].reason").value("SETTLEMENT_LOCKED"));
     }
     @Test void confirmedRoomRejectsAnotherRequest() throws Exception {
         String token=preview().path("previewToken").asText();

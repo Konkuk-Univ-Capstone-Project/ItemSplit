@@ -1,6 +1,6 @@
 # 두 개발자를 위한 공통 개발 계약
 
-작성일: 2026-11-10. 1단계 상태 갱신: 2026-11-11. 기준: `feature/clova-receipt-settlement`의 공통 준비 작업과 사용자와 합의한 역할 분담.
+작성일: 2026-11-10. 2단계 상태 갱신: 2026-11-11. 기준: `feature/clova-receipt-settlement`의 공통 준비 작업과 사용자와 합의한 역할 분담.
 
 활성화 설정은 [README의 정산 확정 API 개발 설정](../README.md#정산-확정-api-개발-설정)을, DB 적용 순서는 [마이그레이션 예약표](database-migration-reservations.md)를 따른다.
 
@@ -9,16 +9,16 @@
 | 구분 | 현재 상태 |
 |---|---|
 | 공통 HTTP 요청 | `frontend/src/httpClient.ts` 분리 및 기존 API·오류 클래스 호환 유지 |
-| 정산 확정 1단계 | 확정본 저장 구조와 미리보기·확정·상태·확정본 조회 API 구현. 편집 제한 통합 전까지 기본 비활성화 |
-| 편집 제한 | 호출 규약만 확정. `RoomEditGuard` 및 변경 경로 연결은 2단계 |
+| 정산 확정 1단계 | 확정본 저장 구조와 미리보기·확정·상태·확정본 조회 API 구현. API 기본 비활성화 유지 |
+| 정산 확정 2단계 | 확정 화면·서버 편집 제한·재개방 구현. 재확정 시 새 버전 생성, 기존 기록 보존 |
 | 마이그레이션 | V4 SQL 추가, V3는 개발자 2에게 예약. 공유·운영 DB 적용은 V3 통합 후 |
 | 내 방 목록·보안·배정 제약 | 개발자 2의 후속 구현 |
 
 개발자 1은 다음 순서로 진행한다.
 
 1. **완료:** 확정본 데이터 구조·확정 API. 확정 시간은 DB TIMESTAMP(6)에 맞춰 마이크로초로 정규화한다.
-2. **다음:** 확정 화면·편집 제한·재개방. 모든 입력 변경 경로에 guard를 연결하고, 멤버 연결·삭제·영수증 변경·OCR 반영과 확정의 경쟁을 검증한다.
-3. 송금 완료 상태 변경 API·화면.
+2. **완료:** 확정 화면·편집 제한·재개방. 현재 브랜치의 입력 변경 경로에 guard를 연결한다. 개발자 2 변경 통합 시 멤버 연결과 최상위 화면의 연결을 다시 검증한다.
+3. **다음:** 송금 완료 상태 변경 API·화면.
 4. 확정본 공유 링크·비로그인 화면.
 5. 확정→완료→공유 전체 흐름 검증.
 
@@ -36,7 +36,7 @@
 - 방·영수증은 기존 ID를 유지하고 참여자는 `RoomMember.id`를 사용한다. 로그인 계정 ID와 혼용하지 않는다.
 - 내 방 목록은 정산 확정 상태·송금 완료율을 포함하지 않는다. 개발자 2는 새 정산 API 없이 완성할 수 있다.
 - 개발자 1은 기존 방 ID·멤버·영수증으로 정산 기능을 개발한다. 새 방 목록 API를 기다리지 않는다.
-- 개발자 2가 소유한 `RoomService`의 guard 호출은 §4 규약으로 준비하되, 실제 클래스가 없는 동안 컴파일되지 않는 import나 가짜 허용 bean을 넣지 않는다. 두 변경을 합칠 때 개발자 1이 guard 연결 패치를 적용하고 개발자 2가 멤버 경로를 검토한다. 최종 통합의 이 접점은 필수다.
+- 2단계에서 현재 `RoomService`의 멤버 변경·참여·방 삭제에 §4 guard를 연결했다. 개발자 2의 동시 계정 연결 변경을 합칠 때도 방 잠금·권한 검사·guard 순서를 유지하고, 두 개발자가 멤버 경로를 함께 검토한다. `App.tsx`의 정산 화면·편집 상태 연결도 내 방 목록 변경과 병합할 때 유지한다.
 - 기존 `RoomAuthorizationService.checkMemberForUpdate`에 편집 제한을 일괄 삽입하지 않는다. 이 메서드는 읽기 전용 공유 발급 등에도 사용되고, 확정 상태에서 허용할 완료·재개방 작업에도 필요하다.
 
 ## 3. 공통 HTTP 요청 계약 — 지금 사용 가능
@@ -81,12 +81,12 @@ export function getMyRooms(token: string, signal?: AbortSignal) {
 
 기존 `frontend/src/api.ts`의 함수는 그대로 사용할 수 있다. `import { ApiError } from './api'`도 같은 클래스를 재노출하므로 OCR의 `instanceof` 분기가 유지된다. 새 기능에서 ApiError를 다시 정의하거나 기존 `api.ts`에 계속 기능을 추가하지 않는다. `API_BASE_URL`은 기존 상대 이미지 URL 보정에도 공유하며 API 호출 경로에 중복 적용하지 않는다.
 
-## 4. 편집 제한 함수 호출 규약 — 개발자 1이 후속 구현
+## 4. 편집 제한 함수 호출 규약 — 2단계 구현
 
-예정 파일: `src/main/java/com/capstone/itemsplit/settlement/RoomEditGuard.java`.
+파일: `src/main/java/com/capstone/itemsplit/settlement/RoomEditGuard.java`.
 
 ```java
-// 향후 구현할 공개 메서드. 현재 코드에는 아직 없다.
+// 호출자는 같은 트랜잭션에서 방 잠금·권한 검사를 먼저 완료한다.
 public void requireEditable(Room lockedRoom);
 ```
 
@@ -100,7 +100,7 @@ public void requireEditable(Room lockedRoom);
 
 guard 자체는 트랜잭션이 없으면 실패하도록 `Propagation.MANDATORY`로 구현한다. 별도 `REQUIRES_NEW` 트랜잭션이나 잠금을 풀고 실행하는 비동기 검사로 분리하지 않는다. 방 잠금을 이미 획득했다는 사전조건은 각 호출 경로의 코드·통합 테스트로 검증한다.
 
-정산 상태 테이블이 없는 DB·조회 실패·알 수 없는 상태를 `OPEN`으로 간주하지 않는다. V4가 정상 적용된 후 아직 확정 이력이 없는 기존 방의 상태 행이 없는 경우에만 초기 `OPEN`으로 취급한다. 첫 확정 시에는 방 잠금 안에서 상태 행을 생성한다.
+정산 상태 테이블이 없는 DB·조회 실패·알 수 없는 상태를 `OPEN`으로 간주하지 않는다. V4가 정상 적용된 후 아직 확정 이력이 없는 기존 방의 상태 행이 없는 경우에만 초기 `OPEN`으로 취급한다. 첫 확정 시에는 방 잠금 안에서 상태 행을 생성한다. API 활성화 플래그와 무관하게 이미 저장된 `CONFIRMED` 상태는 보호한다.
 
 ### 4.2 기존 방 멤버의 변경
 
@@ -145,7 +145,7 @@ HTTP 409의 응답을 다음 형태로 고정한다.
 }
 ```
 
-현재 `ApiException`의 일반 처리기는 details를 빈 목록으로 반환한다. `new ApiException(CONFLICT, ...)`만 던져서는 위 계약이 충족되지 않는다. 개발자 1은 settlement 전용 예외·처리기(기존 OCR 처리 방식 참고)를 추가해 reason을 제공한다. 공통 예외 처리기를 바꿀 필요가 있으면 개발자 2의 보안 변경과 조율한다. 프론트엔드는 문구 비교 대신 `error instanceof ApiError && error.reason === 'SETTLEMENT_LOCKED'`로 상태를 다시 조회하고 안내한다.
+현재 `ApiException`의 일반 처리기는 details를 빈 목록으로 반환한다. `new ApiException(CONFLICT, ...)`만 던져서는 위 계약이 충족되지 않는다. settlement 전용 예외·처리기가 reason을 제공한다. 공통 예외 처리기를 바꿀 필요가 있으면 개발자 2의 보안 변경과 조율한다. 프론트엔드는 문구 비교 대신 `error instanceof ApiError && error.reason === 'SETTLEMENT_LOCKED'`로 상태를 다시 조회하고 안내한다.
 
 ### 4.5 적용 지점과 연결 담당
 
@@ -166,7 +166,7 @@ HTTP 409의 응답을 다음 형태로 고정한다.
 
 조회, 이미지 URL 발급, 기존 공유 조회·발급, 초대 토큰 발급, 완료 표시, 재개방에는 편집 guard를 넣지 않는다. 완료·재개방은 별도의 방장·현재 확정본 검사와 방 잠금으로 보호한다. `checkMemberForUpdate`를 guard로 대체하거나 모든 사용처에 자동으로 삽입하지 않는다.
 
-개발자 2는 실제 guard가 구현되기 전에도 방 목록·보안·관계 제약·방 잠금 기반 연결 처리를 완성할 수 있다. 개발자 1은 두 사람의 변경을 합친 뒤 이 표의 모든 경로를 점검해야 확정 기능을 완료로 표시할 수 있다.
+개발자 2는 정산 화면·API와 독립적으로 방 목록·보안·관계 제약·방 잠금 기반 연결 처리를 완성할 수 있다. 개발자 1은 두 사람의 변경을 합친 뒤 이 표의 모든 경로를 점검해야 확정 기능을 완료로 표시할 수 있다.
 
 ## 5. 정산 확정·완료·공유 기능 계약 — 개발자 1
 
@@ -193,11 +193,11 @@ V4가 생성할 테이블의 예약 이름과 최소 데이터다. 실제 컬럼
 
 과거 확정본의 멤버 식별자는 현재 `room_members` 삭제에 연쇄 삭제되지 않게 한다. 이름·금액은 저장한 값으로 조회하고, 멤버 삭제 후에도 보존한다. 기존 영수증·품목을 수정하면서 확정본 금액을 덮어쓰지 않는다. 방 삭제는 OPEN에서만 가능하며, 명시적 방 삭제 시 확정본과 공유 토큰도 삭제한다. 이 연관 삭제는 개발자 1이 기존 방 삭제 흐름과 연결·검증한다.
 
-재개방은 기존 확정본을 REOPENED로 만들고 방을 OPEN으로 바꾼다. `currentSnapshotId`는 OPEN에서 null, CONFIRMED에서 활성 확정본 ID다. 과거 확정본 ID로의 조회는 계속 가능하다. 재확정 시 새 버전을 생성하고 완료 표시는 전부 PENDING부터 시작한다. 과거 완료 기록은 보존하되 더 이상 수정할 수 없다.
+재개방은 기존 확정본을 REOPENED로 만들고 방을 OPEN으로 바꾼다. `currentSnapshotId`는 OPEN에서 null, CONFIRMED에서 활성 확정본 ID다. 과거 확정본 ID로의 조회는 계속 가능하다. 재확정 시 새 버전을 생성하고 완료 표시는 전부 PENDING부터 시작한다. 과거 완료 기록은 보존하되 더 이상 수정할 수 없다. 방이 이미 OPEN이고 요청한 확정본이 가장 최근의 REOPENED 버전이면 재개방 재시도는 200과 `OPEN`·`currentSnapshotId: null`을 반환한다. 더 오래된 버전 또는 다른 활성 버전은 409, 다른 방의 확정본은 404다.
 
 ### 5.3 API
 
-아래는 전체 목표 경로다. 1단계에서는 상태·미리보기·확정·확정본 조회만 구현하며 나머지는 후속 단계다. 기존 `GET /api/rooms/{roomId}/settlements`와 기존 공유 API는 유지한다. 모든 새 API도 기존 ApiResponse envelope를 따른다.
+아래는 전체 목표 경로다. 1단계의 상태·미리보기·확정·확정본 조회와 2단계의 재개방을 구현했다. 송금 완료 변경·확정본 공유 API는 후속 단계다. 기존 `GET /api/rooms/{roomId}/settlements`와 기존 공유 API는 유지한다. 모든 새 API도 기존 ApiResponse envelope를 따른다.
 
 | 메서드·경로 | 용도 |
 |---|---|
@@ -205,7 +205,7 @@ V4가 생성할 테이블의 예약 이름과 최소 데이터다. 실제 컬럼
 | `GET /api/rooms/{roomId}/settlements/confirmation-preview` | 최신 정산·송금 경로와 `previewToken`, `ready`, `issues` 조회 |
 | `POST /api/rooms/{roomId}/settlement-snapshots` | `{requestId, previewToken}`으로 확정. 최초 201, 동일 요청 재전송 200과 같은 확정본 |
 | `GET /api/rooms/{roomId}/settlement-snapshots/{snapshotId}` | 해당 방의 특정 확정본·멤버 금액·송금 상태 조회 |
-| `POST /api/rooms/{roomId}/settlement-snapshots/{snapshotId}/reopen` | 현재 확정본 재개방. 변경 후 방 상태 반환 |
+| `POST /api/rooms/{roomId}/settlement-snapshots/{snapshotId}/reopen` | 본문 없이 현재 확정본 재개방. 변경 후 방 상태 반환 |
 | `PUT /api/rooms/{roomId}/settlement-snapshots/{snapshotId}/transfers/{transferId}/completion` | `{completed: true/false}`. 변경 후 송금 내역 반환. 토글 API 금지 |
 | `POST /api/rooms/{roomId}/settlement-snapshots/{snapshotId}/share-token` | token, expiresAt, shareUrl 반환 |
 | `GET /api/shared/settlements/{token}` | 비로그인 확정본·완료 상태 읽기 |
@@ -227,7 +227,7 @@ previewToken은 서버에서 정규화한 입력을 식별하고 방에 결합�
 
 ### 5.4 화면·공유
 
-- 정산 화면은 `roomId`, `token`을 받아 자체 상태·확정본 API를 조회한다. 버튼 가시성은 서버가 검증하는 권한의 대체 수단이 아니다.
+- 정산 화면은 `roomId`, `token`을 받아 자체 상태·확정본 API를 조회한다. API가 비활성화된 경우 유효한 방의 상태 조회 404에 한해 기존 정산 화면을 사용한다. 단, 이미 확인한 확정 상태 또는 `SETTLEMENT_LOCKED` 오류는 서버가 OPEN을 반환하기 전까지 잠금으로 유지한다. 다른 조회 오류나 상태 확인 중에는 편집을 허용하지 않는다. 버튼 가시성은 서버가 검증하는 권한의 대체 수단이 아니다.
 - 미리보기 → 방장 확인 → 확정 → 완료 표시 → 필요 시 재개방 흐름을 제공한다. 409면 상태를 새로 읽고 입력을 재검토하게 한다.
 - 공유 URL은 `/share/settlements/{token}`. 직접 접속·새로고침을 위한 SPA fallback을 검증한다.
 - 링크는 특정 snapshotId에 고정한다. 재개방된 과거 버전은 그 사실을 표시하며 새 버전으로 조용히 바꾸지 않는다.

@@ -17,6 +17,7 @@ import org.springframework.transaction.annotation.Transactional;
 @Service @RequiredArgsConstructor @Transactional
 public class OcrDraftService {
     private final RoomAuthorizationService authorization;
+    private final com.capstone.itemsplit.settlement.RoomEditGuard roomEditGuard;
     private final ReceiptRepository receipts;
     private final ReceiptService receiptService;
     private final OcrDraftRepository drafts;
@@ -90,9 +91,10 @@ public class OcrDraftService {
     }
 
     private OcrDraft authorize(Long roomId,Long receiptId,Long jobId,Long userId) {
-        authorization.checkMemberForUpdate(roomId,userId);
+        var room=authorization.checkMemberForUpdate(roomId,userId);
         Receipt receipt=receipts.findByIdAndRoomId(receiptId,roomId).orElseThrow(()->new ApiException(ErrorCode.NOT_FOUND));
         if(receipt.getCreatedBy()==null || !receipt.getCreatedBy().getId().equals(userId)) throw new ApiException(ErrorCode.FORBIDDEN,"영수증 작성자만 초안을 저장·반영할 수 있습니다.");
+        roomEditGuard.requireEditable(room);
         return drafts.findByJobId(jobId).filter(d->d.getReceipt().getId().equals(receiptId))
             .orElseThrow(()->new ApiException(ErrorCode.NOT_FOUND));
     }

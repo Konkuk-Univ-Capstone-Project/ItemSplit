@@ -31,6 +31,10 @@ public class SettlementSnapshot {
     private List<SettlementSnapshotMember> members=new ArrayList<>();
     @OneToMany(mappedBy="snapshot",cascade=CascadeType.ALL) @OrderBy("id ASC")
     private List<SettlementTransfer> transfers=new ArrayList<>();
+    void reopen(Long userId) {
+        status="REOPENED";reopenedByUserId=userId;
+        reopenedAt=LocalDateTime.now().truncatedTo(java.time.temporal.ChronoUnit.MICROS);
+    }
     static SettlementSnapshot create(Room room,long version,Long userId,String requestId,
         String requestFingerprint,String inputFingerprint,List<SettlementService.MemberSettlement> members,
         List<SettlementTransferCalculator.Transfer> transfers) {

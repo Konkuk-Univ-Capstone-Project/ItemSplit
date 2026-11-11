@@ -24,6 +24,7 @@ public class RoomService {
 
 	private static final long INVITE_TOKEN_EXPIRATION_DAYS = 7L;
 
+	private final com.capstone.itemsplit.settlement.RoomEditGuard roomEditGuard;
 	private final RoomRepository roomRepository;
 	private final RoomMemberRepository roomMemberRepository;
 	private final AssignmentRepository assignmentRepository;
@@ -65,6 +66,7 @@ public class RoomService {
 			throw new ApiException(ErrorCode.FORBIDDEN, "Only room owner can delete this room.");
 		}
 
+		roomEditGuard.requireEditable(room);
 		List<Receipt> receipts = receiptRepository.findAllByRoomId(roomId);
 		List<Long> receiptIds = receipts.stream()
 			.map(Receipt::getId)
@@ -92,14 +94,16 @@ public class RoomService {
 
 	@Transactional
 	public RoomMemberResponse addManualMember(Long roomId, Long userId, String displayName) {
-		Room room = roomAuthorizationService.checkMember(roomId, userId);
+		Room room = roomAuthorizationService.checkMemberForUpdate(roomId, userId);
+		roomEditGuard.requireEditable(room);
 		RoomMember roomMember = roomMemberRepository.save(RoomMember.createManual(room, displayName.trim()));
 		return RoomMemberResponse.from(roomMember, room.getOwner().getId());
 	}
 
 	@Transactional
 	public RoomMemberResponse updateMemberName(Long roomId, Long memberId, Long userId, String displayName) {
-		Room room = roomAuthorizationService.checkMember(roomId, userId);
+		Room room = roomAuthorizationService.checkMemberForUpdate(roomId, userId);
+		roomEditGuard.requireEditable(room);
 		RoomMember roomMember = roomMemberRepository.findByRoomIdAndIdWithUser(roomId, memberId)
 			.orElseThrow(() -> new ApiException(ErrorCode.NOT_FOUND, "Member was not found in this room."));
 
@@ -110,6 +114,7 @@ public class RoomService {
 	@Transactional
 	public void deleteMember(Long roomId, Long memberId, Long userId) {
 		Room room = roomAuthorizationService.checkMemberForUpdate(roomId, userId);
+		roomEditGuard.requireEditable(room);
 		RoomMember roomMember = roomMemberRepository.findByRoomIdAndIdWithUser(roomId, memberId)
 			.orElseThrow(() -> new ApiException(ErrorCode.NOT_FOUND, "Member was not found in this room."));
 
@@ -143,7 +148,7 @@ public class RoomService {
 
 	@Transactional
 	public InviteTokenResult issueInviteToken(Long roomId, Long userId) {
-		Room room = roomAuthorizationService.checkMember(roomId, userId);
+		Room room = roomAuthorizationService.checkMemberForUpdate(roomId, userId);
 		String token = generateUniqueToken();
 		LocalDateTime expiresAt = LocalDateTime.now().plusDays(INVITE_TOKEN_EXPIRATION_DAYS);
 
@@ -170,7 +175,12 @@ public class RoomService {
 
 	@Transactional
 	public JoinRoomResult joinRoom(String token, Long userId, Long memberId, String displayName) {
-		Room room = resolveRoomByInviteToken(token);
+        Long roomId = resolveRoomByInviteToken(token).getId();
+        Room room = roomRepository.findByIdForUpdate(roomId)
+            .orElseThrow(() -> new ApiException(ErrorCode.NOT_FOUND));
+        // Revalidate after waiting for the same lock used by invite reissue.
+        if (!roomInviteTokenRepository.findValidRoomId(token, LocalDateTime.now()).filter(roomId::equals).isPresent())
+            throw new ApiException(ErrorCode.VALIDATION_ERROR, "Invite token is invalid or expired.");
 		User user = userService.getById(userId);
 
 		boolean alreadyMember = roomMemberRepository.existsByRoomIdAndUserId(room.getId(), userId);
@@ -180,6 +190,7 @@ public class RoomService {
 			return JoinRoomResult.from(room, roomMember, false);
 		}
 
+		roomEditGuard.requireEditable(room);
 		RoomMember joinedMember;
 		if (memberId != null) {
 			RoomMember targetMember = roomMemberRepository.findByRoomIdAndIdWithUser(room.getId(), memberId)

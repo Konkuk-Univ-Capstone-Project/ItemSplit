@@ -1,3 +1,4 @@
+import { useRoomEditing } from './features/settlement/RoomEditingContext';
 import { useRef, useState, type FormEvent, type RefObject } from 'react';
 import { addItem } from './api';
 
@@ -5,6 +6,7 @@ export function ManualItemForm({ token, roomId, receiptId, formRef, onAdded }: {
   token: string; roomId: number; receiptId: number;
   formRef: RefObject<HTMLFormElement | null>; onAdded: () => Promise<void>;
 }) {
+  const { readOnly, reportError } = useRoomEditing();
   const [name, setName] = useState('');
   const [price, setPrice] = useState('');
   const [quantity, setQuantity] = useState('1');
@@ -14,7 +16,7 @@ export function ManualItemForm({ token, roomId, receiptId, formRef, onAdded }: {
 
   async function submit(event: FormEvent) {
     event.preventDefault();
-    if (inFlight.current) return;
+    if (readOnly || inFlight.current) return;
     if (!name.trim()) { setError('품목명을 입력해주세요.'); return; }
     inFlight.current = true;
     setBusy(true); setError('');
@@ -25,6 +27,7 @@ export function ManualItemForm({ token, roomId, receiptId, formRef, onAdded }: {
       setName(''); setPrice(''); setQuantity('1');
       await onAdded();
     } catch (cause) {
+      reportError(cause);
       setError(saved ? '품목은 저장되었지만 목록을 갱신하지 못했습니다. 새로고침해주세요.' :
         cause instanceof Error ? cause.message : '품목을 추가하지 못했습니다.');
     } finally {
@@ -36,7 +39,7 @@ export function ManualItemForm({ token, roomId, receiptId, formRef, onAdded }: {
   return <form ref={formRef} className="manual-item-form" aria-label="수동 품목 추가" onSubmit={submit}>
     <h4>수동 품목 추가</h4>
     <p>이 영수증에 빠진 품목을 추가합니다. 저장 후 아래 품목 목록에서 참여자를 지정해주세요.</p>
-    <fieldset className="receipt-fieldset" disabled={busy}>
+    <fieldset className="receipt-fieldset" disabled={busy || readOnly}>
       <div className="ocr-edit-fields">
         <label>품목명<input aria-label="추가 품목명" value={name} onChange={event => setName(event.target.value)} maxLength={100} required /></label>
         <label>단가<input aria-label="추가 단가" type="number" min="1" max="1000000" step="1" value={price}

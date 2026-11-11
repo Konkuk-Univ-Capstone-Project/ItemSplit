@@ -18,6 +18,7 @@ public class SettlementSnapshotService {
     private final SettlementSnapshotRepository snapshots;
     private final SettlementService calculation;
     private final SettlementConfirmationInput inputs;
+    private final jakarta.persistence.EntityManager entityManager;
 
     public StateView state(Long roomId,Long userId) {
         authorization.checkMemberForUpdate(roomId,userId);
@@ -58,8 +59,24 @@ public class SettlementSnapshotService {
         authorization.checkMemberForUpdate(roomId,userId);
         return view(snapshots.findByIdAndRoomId(snapshotId,roomId).orElseThrow(()->new ApiException(ErrorCode.NOT_FOUND)));
     }
+    public StateView reopen(Long roomId,Long snapshotId,Long userId) {
+        Room room=authorization.checkMemberForUpdate(roomId,userId);
+        if(!room.getOwner().getId().equals(userId))
+            throw new SettlementRequestException(ErrorCode.FORBIDDEN,"FORBIDDEN","방장만 정산을 재개방할 수 있습니다.");
+        var state=loadState(roomId);
+        var snapshot=snapshots.findByIdAndRoomId(snapshotId,roomId).orElseThrow(()->new ApiException(ErrorCode.NOT_FOUND));
+        entityManager.flush();entityManager.refresh(snapshot);
+        if(state!=null && "OPEN".equals(state.getStatus()) && "REOPENED".equals(snapshot.getStatus())
+            && snapshot.getVersion()==snapshots.latestVersion(roomId)) return new StateView(roomId,"OPEN",null);
+        if(state==null || !"CONFIRMED".equals(state.getStatus()) || !snapshotId.equals(state.getCurrentSnapshotId())
+            || !"CONFIRMED".equals(snapshot.getStatus()))
+            throw conflict("SETTLEMENT_VERSION_CONFLICT","현재 확정된 정산만 재개방할 수 있습니다.");
+        snapshot.reopen(userId);state.reopen();
+        return new StateView(roomId,"OPEN",null);
+    }
     private RoomSettlementState loadState(Long roomId) {
         var state=states.findById(roomId).orElse(null);
+        if(state!=null) {entityManager.flush();entityManager.refresh(state);}
         if(state==null && snapshots.latestVersion(roomId)!=0)
             throw new IllegalStateException("Settlement history exists without room state");
         if(state!=null && !Set.of("OPEN","CONFIRMED").contains(state.getStatus()))

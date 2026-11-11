@@ -21,6 +21,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 @Component @ConditionalOnProperty(name="app.ocr.enabled",havingValue="true")
 public class OcrWorker {
+    private final com.capstone.itemsplit.settlement.RoomEditGuard roomEditGuard;
     private final OcrJobRepository jobs;
     private final OcrJobImageRepository images;
     private final OcrDraftRepository drafts;
@@ -38,7 +39,9 @@ public class OcrWorker {
     public OcrWorker(OcrJobRepository jobs,OcrJobImageRepository images,OcrDraftRepository drafts,OcrDraftItemRepository items,
         RoomRepository rooms,RoomMemberRepository members,ReceiptImageReader reader,ReceiptOcrEngine engine,ObjectMapper mapper,OcrQuotaService quotas,
         @Qualifier("ocrExecutor") ThreadPoolTaskExecutor executor,PlatformTransactionManager transactions,
-        @Value("${app.ocr.stuck-after:3m}") Duration stuckAfter) {
+        @Value("${app.ocr.stuck-after:3m}") Duration stuckAfter,
+        com.capstone.itemsplit.settlement.RoomEditGuard roomEditGuard) {
+        this.roomEditGuard=roomEditGuard;
         this.jobs=jobs;this.images=images;this.drafts=drafts;this.items=items;this.rooms=rooms;this.members=members;
         this.reader=reader;this.engine=engine;this.mapper=mapper;this.quotas=quotas;this.executor=executor;this.stuckAfter=stuckAfter;
         if(stuckAfter.isNegative() || stuckAfter.isZero())throw new IllegalArgumentException("stuck-after must be positive");
@@ -80,6 +83,7 @@ public class OcrWorker {
     private Claim claim(Long jobId) {
         OcrJob job=lockJob(jobId);if(job==null)return null;
         var rows=images.findAllByJobIdOrderBySortOrder(jobId);
+        if(!inputEditable(job)) {discardActive(job,rows);return null;}
         if(!members.existsByRoomIdAndUserId(job.getReceipt().getRoom().getId(),job.getRequestedByUserId())) {
             rows.stream().filter(this::active).forEach(i->{quotas.releaseUncalled(i);i.fail("ACCESS_REVOKED",false);});summarize(job,rows);return null;
         }
@@ -95,6 +99,7 @@ public class OcrWorker {
         OcrJob job=lockJob(claim.jobId());if(job==null)return false;
         var rows=images.findAllByJobIdOrderBySortOrder(job.getId());
         var row=current(rows,claim);if(row==null)return false;
+        if(!inputEditable(job)) {discardActive(job,rows);return false;}
         if(!members.existsByRoomIdAndUserId(job.getReceipt().getRoom().getId(),job.getRequestedByUserId())) {
             rows.stream().filter(this::active).forEach(i->{quotas.releaseUncalled(i);i.fail("ACCESS_REVOKED",false);});
             summarize(job,rows);return false;
@@ -105,6 +110,7 @@ public class OcrWorker {
         OcrJob job=lockJob(claim.jobId());if(job==null)return;
         var rows=images.findAllByJobIdOrderBySortOrder(job.getId());
         var row=current(rows,claim);if(row==null)return;
+        if(!inputEditable(job)) {discardActive(job,rows);return;}
         if(!members.existsByRoomIdAndUserId(job.getReceipt().getRoom().getId(),job.getRequestedByUserId())) {
             row.fail("ACCESS_REVOKED",false);summarize(job,rows);return;
         }
@@ -117,6 +123,21 @@ public class OcrWorker {
         var detail=new CandidateDetail(result.storeName(),result.purchasedAt(),result.totalAmount());
         row.succeed(value(result.storeName()),value(result.purchasedAt()),value(result.totalAmount()),json(detail),duration);
         draft.touch();summarize(job,rows);
+    }
+    private boolean inputEditable(OcrJob job) {
+        try {roomEditGuard.requireEditable(job.getReceipt().getRoom());}
+        catch(com.capstone.itemsplit.settlement.SettlementRequestException error) {
+            if(!"SETTLEMENT_LOCKED".equals(error.reason())) throw error;
+            return false;
+        }
+        return drafts.findByJobId(job.getId()).map(d->"EDITING".equals(d.getStatus())).orElse(false);
+    }
+    /** Cleanup is allowed even when inputs are locked; never retain stale OCR candidates. */
+    private void discardActive(OcrJob job,List<OcrJobImage> rows) {
+        var activeRows=rows.stream().filter(this::active).toList();
+        if(activeRows.isEmpty()) return;
+        activeRows.forEach(row->{quotas.releaseUncalled(row);row.fail("STALE_RESULT",false);});
+        summarize(job,rows);
     }
     private void fail(Claim claim,String code,boolean retryable) {
         tx.executeWithoutResult(status->{

@@ -29,6 +29,11 @@ public class SettlementSnapshotController {
     @GetMapping("/settlement-snapshots/{snapshotId}")
     public ApiResponse<SettlementSnapshotService.SnapshotView> detail(@PathVariable Long roomId,@PathVariable Long snapshotId,
         @AuthenticationPrincipal AuthenticatedUser user) {return ApiResponse.success(service.detail(roomId,snapshotId,userId(user)));}
+    @PostMapping("/settlement-snapshots/{snapshotId}/reopen")
+    public ApiResponse<SettlementSnapshotService.StateView> reopen(@PathVariable Long roomId,@PathVariable Long snapshotId,
+        @AuthenticationPrincipal AuthenticatedUser user) {
+        return ApiResponse.success(service.reopen(roomId,snapshotId,userId(user)));
+    }
     private Long userId(AuthenticatedUser user) {
         if(user==null) throw new ApiException(ErrorCode.UNAUTHORIZED);
         return user.id();

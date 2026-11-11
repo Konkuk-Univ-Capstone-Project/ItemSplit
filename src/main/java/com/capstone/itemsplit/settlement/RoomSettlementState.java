@@ -15,5 +15,6 @@ public class RoomSettlementState {
         RoomSettlementState state=new RoomSettlementState();state.room=room;
         state.status="CONFIRMED";state.currentSnapshotId=snapshotId;return state;
     }
+    void reopen() {status="OPEN";currentSnapshotId=null;}
     void confirm(Long snapshotId) {status="CONFIRMED";currentSnapshotId=snapshotId;}
 }
