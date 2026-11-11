@@ -1,0 +1,71 @@
+@startuml ItemSplitItemSettlementSequence
+title UC-02 품목별 참여자 배정 및 정산 계산
+hide footbox
+autonumber
+skinparam shadowing false
+skinparam defaultFontName SansSerif
+skinparam sequenceMessageAlign center
+skinparam sequence {
+  ArrowColor #334155
+  ParticipantBackgroundColor #EFF6FF
+  ParticipantBorderColor #64748B
+  LifeLineBorderColor #94A3B8
+}
+
+actor "방 멤버" as User
+participant "React 화면" as UI
+participant "영수증 API·서비스\nReceiptController / ReceiptService" as Receipt
+participant "정산 API·서비스\nSettlementController / SettlementService" as Settlement
+database "PostgreSQL" as DB
+
+note over User,DB
+  전제: 로그인한 방 멤버, 영수증·품목 존재.
+  품목 편집 화면의 전체 저장 API를 기준으로 표현한다.
+  품목 참여자는 방별 멤버 식별자로 구분하며, 계정이 없는 수동 등록 멤버도 배정할 수 있다.
+end note
+
+== 결제자·품목별 참여자 저장 ==
+User -> UI : 결제자와 품목별 참여자 지정\n필요 시 정산 제외 선택
+UI -> UI : 제외 품목의 참여자 배정 해제\n단가·수량·품목 합계 사전 검증
+UI -> Receipt : PUT /api/rooms/{roomId}/receipts/{receiptId}/contents\n결제자·전체 품목·참여자·제외 여부
+Receipt -> DB : 방 잠금·멤버/영수증 권한 확인\n최신 편집 가능 상태 조회
+alt 정산이 확정되어 영수증·품목·참여자 배정을 수정할 수 없는 상태
+  Receipt --> UI : 409 정산 확정으로 수정 불가\n(SETTLEMENT_LOCKED)
+  UI --> User : 수정 제한·재개방 필요 안내
+else 정산 확정 전이거나 재개방되어 영수증·품목·참여자 배정을 수정할 수 있는 상태
+  Receipt -> Receipt : 금액 한도·품목 소속·멤버 소속 검증
+  Receipt -> DB : 결제자·품목·배정 변경을 한 트랜잭션으로 저장
+  DB --> Receipt : 커밋
+  Receipt --> UI : 200 갱신된 영수증 상세
+end
+note over Receipt,DB
+  참여자를 아직 지정하지 않은 품목도 초안으로 저장할 수 있다.
+  참여자 배정 기록에는 반드시 실제 방 멤버가 연결되어야 한다.
+  개별 배정 API도 제공: PUT .../items/{itemId}/assignees
+end note
+
+== 개인별 정산 계산 ==
+User -> UI : 정산 결과 조회
+UI -> Settlement : GET /api/rooms/{roomId}/settlements
+Settlement -> DB : 멤버 권한 확인\n방 멤버·영수증·품목·배정 조회
+note right of Settlement : 정산 계산 중 같은 데이터를 다시 조회해도\n동일한 값을 읽도록 보장한다.
+Settlement -> Settlement : 결제자·참여자 누락, 금액 범위,\n빈 영수증·잘못된 배정 검사
+alt 정산 입력에 문제가 있음
+  Settlement --> UI : 200 정산 불가·보완할 항목 반환
+  UI --> User : 문제 영수증·품목 안내 및 보완 요청
+else 정산 가능
+  loop 정산 제외가 아닌 품목마다
+    Settlement -> Settlement : 품목 금액 = 단가 × 수량\n참여자 수로 균등 분배
+    Settlement -> Settlement : 균등 분배 후 남는 금액은 방·품목 식별자를 기준으로\n매번 같은 방식으로 배분\n개인별 부담해야 할 금액 누적
+    Settlement -> Settlement : 영수증 결제자의 결제한 금액 누적
+  end
+  Settlement -> Settlement : 개인별 정산 차액 = 결제한 금액 − 부담해야 할 금액
+  Settlement --> UI : 200 정산 가능·개인별 정산 결과 반환
+  UI -> UI : 부담액보다 적게 결제한 사람과\n많이 결제한 사람을 연결\n일반 조회용 송금 경로 계산
+  UI --> User : 개인별 결제액·부담액·보낼/받을 금액 표시
+end
+note over UI,Settlement
+  이 흐름은 실시간 계산·조회이며 확정본을 저장하지 않는다.
+  확정 미리보기와 확정본의 송금 경로는 UC-03에서 서버가 계산·저장한다.
+end note
+@enduml

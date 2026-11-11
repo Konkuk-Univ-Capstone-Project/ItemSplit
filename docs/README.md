@@ -15,6 +15,18 @@ PR #16 이후의 S3·OCR 설계 보고서 5개에서 현재 채택한 내용을 
 | [공통 API·DB 계약](api-db-contract.md) | 금액·멤버·저장·품목 합계 정산 계약. 아래 설계 전환 범위 확인 필요 |
 | [실행·DB 마이그레이션 절차](../README.md#db-스키마-변경) | 현재 Flyway 실행·백업·새 버전 스크립트 작성 방법 |
 
+## 보고서용 핵심 시퀀스 다이어그램
+
+현재 구현을 기준으로 사용자·화면·서버·DB 및 외부 서비스 사이의 주요 호출을 표현한다. 인증 필터와 저장소별 클래스는 읽기 쉽도록 묶었으며 모든 오류 응답을 나열하지는 않는다.
+
+| 유스케이스 | PlantUML 파일 | 내용 |
+|---|---|---|
+| UC-01 | [영수증 이미지 등록 및 OCR 반영](sequence-diagram/sequence-ocr-receipt.puml) | 업로드, 커밋 후 비동기 인식, 상태 조회, 사용자 검토와 실제 품목 반영 |
+| UC-02 | [품목별 참여자 배정 및 정산 계산](sequence-diagram/sequence-item-settlement.puml) | 전체 품목 저장, 정산 입력 검증, 개인별 금액과 일반 조회용 송금 경로 계산 |
+| UC-03 | [정산 확정 및 재개방·재확정](sequence-diagram/sequence-settlement-confirmation.puml) | 미리보기·멱등 확정·편집 잠금, 재개방과 과거 기록을 보존하는 새 버전 생성 |
+
+UC-03는 보고서 가독성을 위해 `newpage`로 확정과 재개방·재확정을 두 페이지로 나눴다. PlantUML로 렌더링하면 해당 파일에서 두 장이 생성된다. 동작 근거는 `ReceiptImageService`, `OcrService`, `OcrWorker`, `OcrDraftService`, `ReceiptService`, `SettlementService`, `SettlementSnapshotService`와 프론트엔드의 정산 조회 화면이다.
+
 ## 구현 상태와 설계 우선순위
 
 PR #20으로 Flyway 전환은 반영되었지만 이 문서 정리가 S3·OCR 기능 구현을 뜻하지는 않는다. 기존 동작 확인은 공통 계약과 코드를 기준으로 하고, 앞으로 구현할 S3·OCR 기능은 위 최종 설계를 따른다.
