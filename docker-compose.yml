@@ -16,6 +16,7 @@ services:
       DB_URL: jdbc:postgresql://postgres:5432/${DB_NAME:-itemsplit}
       JWT_SECRET: ${JWT_SECRET:-change-me-to-a-long-random-secret}
       JWT_ACCESS_TOKEN_EXPIRATION: ${JWT_ACCESS_TOKEN_EXPIRATION:-86400000}
+      SETTLEMENT_SNAPSHOTS_ENABLED: ${SETTLEMENT_SNAPSHOTS_ENABLED:-true}
       LOCAL_STORAGE_ROOT: /app/storage
       LOCAL_STORAGE_SIGNING_SECRET: ${LOCAL_STORAGE_SIGNING_SECRET:-}
       STORAGE_TYPE: ${STORAGE_TYPE:-local}

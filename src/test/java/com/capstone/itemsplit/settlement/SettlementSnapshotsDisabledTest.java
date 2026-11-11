@@ -5,10 +5,10 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerMapping;
 import static org.assertj.core.api.Assertions.*;
-@SpringBootTest @ActiveProfiles("test")
+@SpringBootTest(properties="app.settlement.snapshots.enabled=false") @ActiveProfiles("test")
 class SettlementSnapshotsDisabledTest {
     @Autowired @org.springframework.beans.factory.annotation.Qualifier("requestMappingHandlerMapping") RequestMappingHandlerMapping mappings;
-    @Test void snapshotRoutesAreAbsentByDefaultWhileExistingSettlementRemains() {
+    @Test void snapshotRoutesAreAbsentWhenExplicitlyDisabledWhileExistingSettlementRemains() {
         var paths=mappings.getHandlerMethods().keySet().stream().flatMap(m->m.getPatternValues().stream()).toList();
         assertThat(paths).contains("/api/rooms/{roomId}/settlements")
             .doesNotContain("/api/rooms/{roomId}/settlement-state","/api/rooms/{roomId}/settlements/confirmation-preview",

@@ -42,8 +42,8 @@ info:
 app:
   settlement:
     snapshots:
-      # Enable only after stage-2 edit protection is integrated.
-      enabled: ${SETTLEMENT_SNAPSHOTS_ENABLED:false}
+      # Enabled by default with edit protection; set false to disable snapshot APIs.
+      enabled: ${SETTLEMENT_SNAPSHOTS_ENABLED:true}
   ocr:
     max-attempts: 3
     limit:
