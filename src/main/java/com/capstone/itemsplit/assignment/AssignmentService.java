@@ -22,6 +22,7 @@ import org.springframework.transaction.annotation.Transactional;
 @Transactional(readOnly = true)
 public class AssignmentService {
 
+    private final com.capstone.itemsplit.settlement.RoomEditGuard roomEditGuard;
 	private final AssignmentRepository assignmentRepository;
 	private final ItemRepository itemRepository;
 	private final ReceiptRepository receiptRepository;
@@ -41,7 +42,7 @@ public class AssignmentService {
 		Long requesterId,
 		List<Long> memberIds
 	) {
-		roomAuthorizationService.checkMemberForUpdate(roomId, requesterId);
+		roomEditGuard.requireEditable(roomAuthorizationService.checkMemberForUpdate(roomId, requesterId));
 		Item item = validateRequestScope(roomId, receiptId, itemId, requesterId);
 		LinkedHashSet<Long> uniqueMemberIds = new LinkedHashSet<>(memberIds);
 		if (item.isExcludedFromSettlement() && !uniqueMemberIds.isEmpty()) {

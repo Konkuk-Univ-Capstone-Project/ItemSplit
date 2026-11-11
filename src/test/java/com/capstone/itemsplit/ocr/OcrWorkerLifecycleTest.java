@@ -40,6 +40,7 @@ import static org.mockito.Mockito.when;
 @SpringBootTest(properties = {
     "spring.datasource.url=jdbc:h2:mem:ocr-lifecycle;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1",
     "app.ocr.worker-threads=2",
+    "app.settlement.snapshots.enabled=true",
     "app.ocr.recovery-interval-ms=3600000"
 })
 @ActiveProfiles({"test", "ocr-demo"})
@@ -53,6 +54,8 @@ class OcrWorkerLifecycleTest {
     @Autowired OcrDemoService demoService;
     @Autowired OcrService service;
     @Autowired OcrWorker worker;
+    @Autowired OcrDraftService draftService;
+    @Autowired com.capstone.itemsplit.settlement.SettlementSnapshotService settlements;
     @Autowired OcrJobRepository jobs;
     @Autowired OcrJobImageRepository jobImages;
     @Autowired OcrDraftRepository drafts;
@@ -200,6 +203,75 @@ class OcrWorkerLifecycleTest {
             assertThat(successful.draft().items()).hasSize(2);
             verify(engine, times(1)).recognize(any());
         }
+    }
+
+    @Test
+    void lateResultCannotWriteCandidatesIntoStoredConfirmedRoom() throws Exception {
+        Actor actor=actor();
+        var receipt=demoService.create(actor.roomId(),actor.userId(),"demo",List.of(FakeOcrScenario.NORMAL,FakeOcrScenario.NORMAL));
+        try(var held=new HeldRecognition()) {
+            var started=start(actor,receipt);held.awaitEntered();
+            // Defensive persisted state: a worker queued before deployment must respect an existing lock.
+            installConfirmedSnapshot(actor);
+            held.releaseAndDrain();
+            var result=service.get(actor.roomId(),receipt.receiptId(),started.jobId(),actor.userId());
+            assertThat(result.draft().items()).isEmpty();
+            assertThat(result.images()).hasSize(2).allSatisfy(image->{
+                assertThat(image.candidates()).isNull();
+                assertThat(image.status()).isEqualTo("FAILED");
+                assertThat(image.errorCode()).isEqualTo("STALE_RESULT");
+            });
+            assertThat(userUsage(actor)).isEqualTo(1);
+            verify(engine,times(1)).recognize(any());
+        }
+    }
+
+    @Test
+    void recoveryStillReleasesUncalledQuotaInConfirmedRoom() throws Exception {
+        Actor actor=actor();
+        var receipt=demoService.create(actor.roomId(),actor.userId(),"demo",List.of(FakeOcrScenario.NORMAL,FakeOcrScenario.NORMAL));
+        try(var held=new HeldRecognition()) {
+            var started=start(actor,receipt);held.awaitEntered();assertThat(userUsage(actor)).isEqualTo(2);
+            installConfirmedSnapshot(actor);
+            worker.recoverOnStartup();
+            assertThat(userUsage(actor)).isEqualTo(1);
+            var recovered=service.get(actor.roomId(),receipt.receiptId(),started.jobId(),actor.userId());
+            assertThat(recovered.images()).allSatisfy(image->assertThat(image.status()).isEqualTo("FAILED"));
+            held.releaseAndDrain();
+            assertThat(service.get(actor.roomId(),receipt.receiptId(),started.jobId(),actor.userId())).isEqualTo(recovered);
+        }
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(booleans={false,true})
+    void interruptedLateResultCannotChangeAppliedDraftAfterConfirmationOrReopen(boolean reopen) throws Exception {
+        Actor actor=actor();var receipt=demo(actor);
+        try(var held=new HeldRecognition()) {
+            var started=start(actor,receipt);held.awaitEntered();
+            worker.recoverOnStartup();
+            var failed=service.get(actor.roomId(),receipt.receiptId(),started.jobId(),actor.userId());
+            var saved=draftService.save(actor.roomId(),receipt.receiptId(),started.jobId(),actor.userId(),
+                new OcrDraftService.SaveRequest(failed.draft().revision(),receipt.imageIds(),List.of(
+                    new OcrDraftService.LineRequest(null,"reviewed",100L,1,List.of(actor.memberId()),false,false))));
+            draftService.apply(actor.roomId(),receipt.receiptId(),started.jobId(),actor.userId(),new OcrDraftService.ApplyRequest(saved.draft().revision(),true));
+            var preview=settlements.preview(actor.roomId(),actor.userId());assertThat(preview.ready()).isTrue();
+            var snapshot=settlements.confirm(actor.roomId(),actor.userId(),new com.capstone.itemsplit.settlement.SettlementSnapshotService.ConfirmRequest("confirmed",preview.previewToken())).snapshot();
+            if(reopen) settlements.reopen(actor.roomId(),snapshot.snapshotId(),actor.userId());
+            var before=service.get(actor.roomId(),receipt.receiptId(),started.jobId(),actor.userId());
+            var receiptBefore=receiptService.getReceipt(actor.roomId(),receipt.receiptId(),actor.userId());
+            String previewBefore=settlements.preview(actor.roomId(),actor.userId()).previewToken();
+            held.releaseAndDrain();
+            assertThat(service.get(actor.roomId(),receipt.receiptId(),started.jobId(),actor.userId())).isEqualTo(before);
+            assertThat(receiptService.getReceipt(actor.roomId(),receipt.receiptId(),actor.userId())).isEqualTo(receiptBefore);
+            assertThat(settlements.preview(actor.roomId(),actor.userId()).previewToken()).isEqualTo(previewBefore);
+            assertThat(settlements.detail(actor.roomId(),snapshot.snapshotId(),actor.userId()).status()).isEqualTo(reopen?"REOPENED":"CONFIRMED");
+        }
+    }
+
+    private void installConfirmedSnapshot(Actor actor) {
+        jdbc.update("insert into settlement_snapshots(room_id,room_name,version,status,confirmed_by_user_id,confirmed_at,request_id,request_fingerprint,input_fingerprint) values(?,'stored',1,'CONFIRMED',?,CURRENT_TIMESTAMP,'stored','stored','stored')",actor.roomId(),actor.userId());
+        Long id=jdbc.queryForObject("select id from settlement_snapshots where room_id=?",Long.class,actor.roomId());
+        jdbc.update("insert into room_settlement_states(room_id,status,current_snapshot_id) values(?,'CONFIRMED',?)",actor.roomId(),id);
     }
 
     private Actor actor() {

@@ -27,6 +27,7 @@ public class OcrJob {
         job.provider=provider; job.status=Status.PENDING; job.createdAt=LocalDateTime.now();return job;
     }
     void status(Status status) {
+        if(this.status==status) return;
         this.status=status;
         if(status==Status.PROCESSING && startedAt==null) startedAt=LocalDateTime.now();
         finishedAt=(status==Status.PENDING || status==Status.PROCESSING) ? null : LocalDateTime.now();

@@ -81,6 +81,15 @@ test('room list separates loading, empty, failed and loaded states', () => {
   assert.equal(loaded.match(/title="방 삭제"/g)?.length, 1, 'only the owned room has a delete button');
 });
 
+test('server room list keeps selected room deletion disabled while settlement editing is blocked', () => {
+  const props = { rooms, selectedRoomId: 4, loading: false, error: null, onSelect: () => {},
+    onRetry: () => {}, onDelete: () => {} };
+  const locked = renderToStaticMarkup(<RoomList {...props} selectedRoomReadOnly />);
+  assert.match(locked, /title="방 삭제"[^>]*disabled=""/);
+  const reopened = renderToStaticMarkup(<RoomList {...props} selectedRoomReadOnly={false} />);
+  assert.doesNotMatch(reopened, /title="방 삭제"[^>]*disabled/);
+});
+
 function deferredFetch() {
   const calls: { token: string; signal: AbortSignal; resolve: (rooms: RoomListItem[]) => void }[] = [];
   const fetchRooms = (token: string, signal: AbortSignal) =>

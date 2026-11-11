@@ -11,9 +11,10 @@ export type RoomListProps = {
   // Optional: the rail shows a delete button on rooms the account owns.
   onDelete?: (room: RoomListItem) => void;
   deletingRoomId?: number | null;
+  selectedRoomReadOnly?: boolean;
 };
 
-export function RoomList({ rooms, selectedRoomId, loading, error, onSelect, onRetry, onDelete, deletingRoomId = null }: RoomListProps) {
+export function RoomList({ rooms, selectedRoomId, loading, error, onSelect, onRetry, onDelete, deletingRoomId = null, selectedRoomReadOnly = false }: RoomListProps) {
   // A failed load is shown as an error, never as an empty list.
   if (error) {
     return (
@@ -52,7 +53,7 @@ export function RoomList({ rooms, selectedRoomId, loading, error, onSelect, onRe
               className="icon-action danger room-delete-button"
               type="button"
               title="방 삭제"
-              disabled={deletingRoomId !== null}
+              disabled={deletingRoomId !== null || (room.roomId === selectedRoomId && selectedRoomReadOnly)}
               onClick={() => onDelete(room)}
             >
               <Trash2 size={15} />

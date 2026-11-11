@@ -32,6 +32,7 @@ class AssignmentMemberIdTest {
     @Mock UserRepository users;
     @Mock RoomMemberRepository members;
     @Mock RoomAuthorizationService authorization;
+    @Mock com.capstone.itemsplit.settlement.RoomEditGuard roomEditGuard;
     @InjectMocks AssignmentService service;
 
     @Test

@@ -1,3 +1,4 @@
+import { useRoomEditing } from './features/settlement/RoomEditingContext';
 import { useRef, useState } from 'react';
 import { applyReceiptOcrDraft, getReceiptOcr, retryReceiptOcrImage, saveReceiptOcrDraft } from './api';
 import { calculatedUnitPrice, imageRetryAvailable } from './ocrReview';
@@ -20,6 +21,7 @@ export function OcrDraftEditor({ token, roomId, job, members, onSaved, onApplied
   onSaved: (job: ReceiptOcrJob) => void; onApplied: () => Promise<void>;
   canRetry?: boolean;
 }) {
+  const { readOnly, reportError } = useRoomEditing();
   const [lines, setLines] = useState<OcrDraftWrite['items']>(() => job.draft.items.map(line => ({
     draftItemId: line.draftItemId, name: line.name, price: line.price, quantity: line.quantity,
     memberIds: [...line.memberIds], excludedFromSettlement: line.excludedFromSettlement, removed: line.removed
@@ -35,7 +37,7 @@ export function OcrDraftEditor({ token, roomId, job, members, onSaved, onApplied
     setDirty(true); setConfirmed(false);
   }
   async function action(apply: boolean) {
-    if (inFlight.current || (apply && (dirty || !confirmed || job.draft.blockers.length > 0))) return;
+    if (readOnly || inFlight.current || (apply && (dirty || !confirmed || job.draft.blockers.length > 0))) return;
     inFlight.current = true; setBusy(true); setError('');
     try {
       if (apply) {
@@ -48,20 +50,20 @@ export function OcrDraftEditor({ token, roomId, job, members, onSaved, onApplied
           revision: job.draft.revision, coveredImageIds: covered, items: lines
         }));
       }
-    } catch (e) { setError(e instanceof Error ? e.message : '저장하지 못했습니다.'); }
+    } catch (e) { reportError(e); setError(e instanceof Error ? e.message : '저장하지 못했습니다.'); }
     finally { inFlight.current = false; setBusy(false); }
   }
   async function retry(imageId: number) {
-    if (inFlight.current || !imageRetryAvailable(job, imageId, canRetry, dirty)) return;
+    if (readOnly || inFlight.current || !imageRetryAvailable(job, imageId, canRetry, dirty)) return;
     inFlight.current = true; setBusy(true); setError(''); setConfirmed(false);
     try { onSaved(await retryReceiptOcrImage(token, roomId, job.receiptId, job.jobId, imageId)); }
-    catch (e) { setError(e instanceof Error ? e.message : '다시 인식하지 못했습니다.'); }
+    catch (e) { reportError(e); setError(e instanceof Error ? e.message : '다시 인식하지 못했습니다.'); }
     finally { inFlight.current = false; setBusy(false); }
   }
   return <div className="ocr-review">
     <h4>정산 품목 검토</h4>
     <p>품목과 금액을 수정하고 함께 부담할 참여자를 선택하세요. 삭제 표시는 반영할 품목에서 빼고, 정산 제외는 품목을 남긴 채 부담 계산에서 뺍니다.</p>
-    <fieldset className="receipt-fieldset" disabled={busy}>
+    <fieldset className="receipt-fieldset" disabled={busy || readOnly}>
       {lines.map((line, index) => {
         const original = job.draft.items.find(item => item.draftItemId === line.draftItemId);
         const candidate = calculatedUnitPrice(line, original);

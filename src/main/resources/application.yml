@@ -40,6 +40,10 @@ info:
     name: ${spring.application.name}
 
 app:
+  settlement:
+    snapshots:
+      # Enabled by default with edit protection; set false to disable snapshot APIs.
+      enabled: ${SETTLEMENT_SNAPSHOTS_ENABLED:true}
   ocr:
     max-attempts: 3
     limit:

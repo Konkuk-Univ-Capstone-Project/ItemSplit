@@ -1,3 +1,4 @@
+import { useRoomEditing } from './features/settlement/RoomEditingContext';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { getLatestReceiptOcr, getReceiptOcr, startReceiptOcr, uploadReceiptImage } from './api';
 import { ReceiptImageViewer, sourcePolygons, type ImageSource } from './ReceiptImageViewer';
@@ -11,6 +12,7 @@ const errorMessage = (error: unknown) => error instanceof Error ? error.message 
 export function ImageReceiptPanel({ token, roomId, onUploaded }: {
   token: string; roomId: number; onUploaded: (receiptId: number) => Promise<void>;
 }) {
+  const { readOnly, reportError } = useRoomEditing();
   const [file, setFile] = useState<File | null>(null);
   const [name, setName] = useState('사진 영수증');
   const [preview, setPreview] = useState('');
@@ -28,7 +30,7 @@ export function ImageReceiptPanel({ token, roomId, onUploaded }: {
 
   async function upload(event: FormEvent) {
     event.preventDefault();
-    if (!file || inFlight.current || uploaded) return;
+    if (readOnly || !file || inFlight.current || uploaded) return;
     if (!['image/jpeg', 'image/png'].includes(file.type) || file.size === 0 || file.size > 10 * 1024 * 1024) {
       setError('10MB 이하의 JPEG 또는 PNG 사진을 선택해주세요.'); return;
     }
@@ -38,14 +40,14 @@ export function ImageReceiptPanel({ token, roomId, onUploaded }: {
       const result = await uploadReceiptImage(token, roomId, file, name.trim() || '사진 영수증');
       setUploaded(true);
       await onUploaded(result.receiptId);
-    } catch (e) { setError(errorMessage(e)); }
+    } catch (e) { reportError(e); setError(errorMessage(e)); }
     finally { inFlight.current = false; setBusy(false); }
   }
 
   return <form className="panel image-upload-panel" onSubmit={upload}>
     <h3>영수증 사진 첨부</h3>
     <p>사진을 올린 뒤 인식을 시작하면 품목과 금액을 확인할 수 있습니다.</p>
-    <fieldset className="receipt-fieldset" disabled={busy}>
+    <fieldset className="receipt-fieldset" disabled={busy || readOnly}>
       <label>사진 영수증 이름<input value={name} maxLength={100} onChange={e => setName(e.target.value)} /></label>
       <label>영수증 사진<input type="file" accept="image/jpeg,image/png" onChange={e => {
         setFile(e.target.files?.[0] ?? null); setUploaded(false); setError('');
@@ -78,6 +80,7 @@ export function ReceiptOcrPanel({ token, roomId, receiptId, name, members, curre
   members: RoomMember[]; currentUserId?: number; onApplied: () => Promise<void>;
   onAddManualItem?: () => void;
 }) {
+  const { readOnly, reportError } = useRoomEditing();
   const [mobilePane, setMobilePane] = useState<'photo' | 'items'>('items');
   const [source, setSource] = useState<ImageSource | null>(null);
   function selectSource(item: ReceiptOcrJob['draft']['items'][number]) {
@@ -116,11 +119,11 @@ export function ReceiptOcrPanel({ token, roomId, receiptId, name, members, curre
   }
 
   async function start() {
-    if (inFlight.current || job || loading || error) return;
+    if (readOnly || inFlight.current || job || loading || error) return;
     inFlight.current = true; setStarting(true); setError('');
     requestId.current ??= crypto.randomUUID();
     try { handleSaved(await startReceiptOcr(token, roomId, receiptId, requestId.current)); }
-    catch (e) { setError(errorMessage(e)); }
+    catch (e) { reportError(e); setError(errorMessage(e)); }
     finally { inFlight.current = false; setStarting(false); }
   }
 
@@ -136,7 +139,7 @@ export function ReceiptOcrPanel({ token, roomId, receiptId, name, members, curre
     {pollNotice && <p role="status">{pollNotice}</p>}
     {loading ? <p role="status">인식 상태 확인 중…</p> : !job && !error && <>
       <p>업로드한 사진에서 품목과 금액을 읽습니다.</p>
-      <button className="button primary" disabled={starting} onClick={start}>
+      <button className="button primary" disabled={starting || readOnly} onClick={start}>
         {starting ? '인식 요청 중…' : '영수증 인식 시작'}
       </button>
     </>}
@@ -150,7 +153,7 @@ export function ReceiptOcrPanel({ token, roomId, receiptId, name, members, curre
       <ReceiptOcrResult job={job} onSelectSource={selectSource} />
       {job.draft.status === 'APPLIED' ? <>
         <p role="status">정산 품목에 반영되었습니다. 아래에서 결제자·참여자를 확인하고 누락된 품목을 추가할 수 있습니다.</p>
-        {onAddManualItem && <button className="button secondary" type="button" onClick={onAddManualItem}>누락 품목 추가</button>}
+        {!readOnly && onAddManualItem && <button className="button secondary" type="button" onClick={onAddManualItem}>누락 품목 추가</button>}
       </> :
         !['PENDING', 'PROCESSING'].includes(job.status) && (currentUserId === job.requestedByUserId ?
           <OcrDraftEditor key={`${job.jobId}-${job.draft.revision}-${reload}`} token={token} roomId={roomId} job={job}

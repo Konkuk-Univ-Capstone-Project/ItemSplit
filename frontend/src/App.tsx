@@ -1,3 +1,9 @@
+import { SharedSettlementPage } from './features/sharedSettlement/SharedSettlementPage';
+import { isSharedPath } from './features/sharedSettlement/controller';
+import { SnapshotShare } from './features/settlement/SnapshotShare';
+import { SettlementController, editingBlocked, settlementConflict, settlementMessage } from './features/settlement/controller';
+import { SettlementPanel } from './features/settlement/SettlementPanel';
+import { RoomEditingContext, useRoomEditing } from './features/settlement/RoomEditingContext';
 import {
   Check,
   ChevronRight,
@@ -15,7 +21,7 @@ import {
   WalletCards,
   X
 } from 'lucide-react';
-import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { ImageReceiptPanel, ReceiptOcrPanel } from './ImageReceiptPanel';
 import { ManualItemForm } from './ManualItemForm';
 import {
@@ -163,6 +169,11 @@ function calculateSettlementTransfers(members: Settlement['members']): Settlemen
 }
 
 function App() {
+  const path = window.location.pathname;
+  return isSharedPath(path) ? <SharedSettlementPage path={path}/> : <PrivateApp/>;
+}
+
+function PrivateApp() {
   const [auth, setAuth] = useState<AuthSession | null>(() => readJson<AuthSession | null>(AUTH_KEY, null));
   const myRooms = useMyRooms(auth?.accessToken ?? null, auth?.userId ?? null);
   // The selection is stored with its account so a previous account's choice is never applied to the next one.
@@ -175,6 +186,8 @@ function App() {
   const [activeTab, setActiveTab] = useState<MainTab>('receipts');
   const [notice, setNotice] = useState<Notice>(null);
   const [roomRefreshVersion, setRoomRefreshVersion] = useState(0);
+  const [roomEditStatus, setRoomEditStatus] = useState<{key: string; blocked: boolean} | null>(null);
+  const activeRoomKey = `${auth?.accessToken}:${activeRoomId}`;
 
   useEffect(() => {
     clearLegacyRoomStorage(localStorage);
@@ -260,6 +273,9 @@ function App() {
 
       <main className="workspace">
         <RoomRail
+          key={auth.accessToken}
+          activeRoomReadOnly={roomEditStatus?.key !== activeRoomKey || roomEditStatus.blocked}
+          onSettlementConflict={() => setRoomRefreshVersion(version => version + 1)}
           token={auth.accessToken}
           rooms={myRooms.rooms}
           roomsLoading={myRooms.loading}
@@ -277,6 +293,8 @@ function App() {
 
           {activeRoom ? (
             <RoomWorkspace
+              key={activeRoomKey}
+              onEditStatus={setRoomEditStatus}
               auth={auth}
               room={activeRoom}
               refreshVersion={roomRefreshVersion}
@@ -489,17 +507,21 @@ function SharedLookup({ setNotice }: { setNotice: (notice: Notice) => void }) {
 }
 
 function RoomRail({
+  activeRoomReadOnly,
+  onSettlementConflict,
   token,
   rooms,
   roomsLoading,
   roomsError,
   reloadRooms,
   activeRoomId,
-  saveRoom,
-  removeRoom,
+  saveRoom: publishRoom,
+  removeRoom: publishRemoval,
   setActiveRoomId,
-  setNotice
+  setNotice: publishNotice
 }: {
+  activeRoomReadOnly: boolean;
+  onSettlementConflict: () => void;
   token: string;
   rooms: RoomListItem[];
   roomsLoading: boolean;
@@ -511,6 +533,11 @@ function RoomRail({
   setActiveRoomId: (roomId: number) => void;
   setNotice: (notice: Notice) => void;
 }) {
+  const alive = useRef(true);
+  useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
+  function setNotice(notice: Notice) { if (alive.current) publishNotice(notice); }
+  function saveRoom(room: RecentRoom) { if (alive.current) publishRoom(room); }
+  function removeRoom(roomId: number) { if (alive.current) publishRemoval(roomId); }
   const [roomName, setRoomName] = useState('');
   const [inviteToken, setInviteToken] = useState('');
   const [joinOptions, setJoinOptions] = useState<{ roomId: number; roomName: string; members: RoomMember[] } | null>(null);
@@ -519,31 +546,19 @@ function RoomRail({
   const [joinNickname, setJoinNickname] = useState('');
   const [submitting, setSubmitting] = useState<'create' | 'join' | 'options' | null>(null);
   const [deletingRoomId, setDeletingRoomId] = useState<number | null>(null);
-  // Requests started before logout must not report into the next account's screen.
-  const mounted = useRef(true);
-  useEffect(() => {
-    mounted.current = true;
-    return () => {
-      mounted.current = false;
-    };
-  }, []);
-
-  function showNotice(next: Notice) {
-    if (mounted.current) setNotice(next);
-  }
 
   async function handleCreate(event: FormEvent) {
     event.preventDefault();
     setSubmitting('create');
-    showNotice(null);
+    setNotice(null);
     try {
       const room = await createRoom(token, roomName);
-      if (!mounted.current) return;
+      if (!alive.current) return;
       saveRoom({ roomId: room.roomId, roomName: room.roomName, owner: true });
       setRoomName('');
-      showNotice({ kind: 'success', text: `${room.roomName} 방을 만들었습니다.` });
+      setNotice({ kind: 'success', text: `${room.roomName} 방을 만들었습니다.` });
     } catch (error) {
-      showNotice({ kind: 'error', text: error instanceof Error ? error.message : '방 생성에 실패했습니다.' });
+      setNotice({ kind: 'error', text: error instanceof Error ? error.message : '방 생성에 실패했습니다.' });
     } finally {
       setSubmitting(null);
     }
@@ -552,10 +567,10 @@ function RoomRail({
   async function handleOpenJoinDialog(event: FormEvent) {
     event.preventDefault();
     setSubmitting('options');
-    showNotice(null);
+    setNotice(null);
     try {
       const result = await getJoinOptions(token, inviteToken.trim());
-      if (!mounted.current) return;
+      if (!alive.current) return;
       setJoinOptions(result);
       const firstUnlinked = result.members.find((member) => !member.linked);
       setSelectedJoinMemberId(firstUnlinked ? String(firstUnlinked.memberId) : '');
@@ -564,7 +579,7 @@ function RoomRail({
     } catch (error) {
       setJoinOptions(null);
       setJoinDialogOpen(false);
-      showNotice({ kind: 'error', text: error instanceof Error ? error.message : '참가 옵션을 불러오지 못했습니다.' });
+      setNotice({ kind: 'error', text: error instanceof Error ? error.message : '참가 옵션을 불러오지 못했습니다.' });
     } finally {
       setSubmitting(null);
     }
@@ -576,7 +591,7 @@ function RoomRail({
     }
 
     setSubmitting('join');
-    showNotice(null);
+    setNotice(null);
     try {
       const room = await joinRoomWithOptions(
         token,
@@ -584,35 +599,37 @@ function RoomRail({
         selectedJoinMemberId ? Number(selectedJoinMemberId) : null,
         joinNickname || null
       );
-      if (!mounted.current) return;
+      if (!alive.current) return;
       saveRoom({ roomId: room.roomId, roomName: room.roomName, owner: false });
       setInviteToken('');
       setJoinOptions(null);
       setJoinDialogOpen(false);
       setSelectedJoinMemberId('');
       setJoinNickname('');
-      showNotice({ kind: 'success', text: `${room.roomName} 방에 연결되었습니다.` });
+      setNotice({ kind: 'success', text: `${room.roomName} 방에 연결되었습니다.` });
     } catch (error) {
-      showNotice({ kind: 'error', text: error instanceof Error ? error.message : '방 참가에 실패했습니다.' });
+      setNotice({ kind: 'error', text: error instanceof Error ? error.message : '방 참가에 실패했습니다.' });
     } finally {
       setSubmitting(null);
     }
   }
 
   async function handleDeleteRoom(room: RoomListItem) {
+    if (room.roomId === activeRoomId && activeRoomReadOnly) return;
     if (!window.confirm(`${room.roomName} 방을 삭제할까요?\n영수증, 품목, 정산, 멤버 정보가 함께 삭제됩니다.`)) {
       return;
     }
 
     setDeletingRoomId(room.roomId);
-    showNotice(null);
+    setNotice(null);
     try {
       await deleteRoom(token, room.roomId);
-      if (!mounted.current) return;
+      if (!alive.current) return;
       removeRoom(room.roomId);
-      showNotice({ kind: 'success', text: `${room.roomName} 방을 삭제했습니다.` });
+      setNotice({ kind: 'success', text: `${room.roomName} 방을 삭제했습니다.` });
     } catch (error) {
-      showNotice({ kind: 'error', text: error instanceof Error ? error.message : '방 삭제에 실패했습니다.' });
+      if (alive.current && settlementConflict(error)) onSettlementConflict();
+      setNotice({ kind: 'error', text: settlementConflict(error) ? settlementMessage(error) : error instanceof Error ? error.message : '방 삭제에 실패했습니다.' });
     } finally {
       setDeletingRoomId(null);
     }
@@ -751,12 +768,14 @@ function RoomRail({
         onRetry={() => void reloadRooms()}
         onDelete={handleDeleteRoom}
         deletingRoomId={deletingRoomId}
+        selectedRoomReadOnly={activeRoomReadOnly}
       />
     </aside>
   );
 }
 
 function RoomWorkspace({
+  onEditStatus,
   auth,
   room,
   refreshVersion,
@@ -764,8 +783,9 @@ function RoomWorkspace({
   setActiveTab,
   removeRoom,
   updateRoomOwnership,
-  setNotice
+  setNotice: publishNotice
 }: {
+  onEditStatus: (value: {key: string; blocked: boolean}) => void;
   auth: AuthSession;
   room: RecentRoom;
   refreshVersion: number;
@@ -775,6 +795,17 @@ function RoomWorkspace({
   updateRoomOwnership: (roomId: number, owner: boolean) => void;
   setNotice: (notice: Notice) => void;
 }) {
+  const alive = useRef(true);
+  const roomLoadVersion = useRef(0);
+  const controller = useMemo(() => new SettlementController(auth.accessToken, room.roomId), [auth.accessToken, room.roomId]);
+  const settlementView = useSyncExternalStore(controller.subscribe, controller.getSnapshot, controller.getSnapshot);
+  const readOnly = editingBlocked(settlementView);
+  useEffect(() => {
+    alive.current = true; controller.activate();
+    return () => { alive.current = false; controller.dispose(); roomLoadVersion.current++; receiptLoadVersion.current++; };
+  }, [controller]);
+  useEffect(() => { onEditStatus({key: `${auth.accessToken}:${room.roomId}`, blocked: readOnly}); }, [readOnly, auth.accessToken, room.roomId, onEditStatus]);
+  function setNotice(notice: Notice) { if (alive.current) publishNotice(notice); }
   const [members, setMembers] = useState<RoomMember[]>([]);
   const [receipts, setReceipts] = useState<ReceiptSummary[]>([]);
   const [selectedReceiptId, updateSelectedReceiptId] = useState<number | null>(null);
@@ -788,6 +819,7 @@ function RoomWorkspace({
   selectedReceiptIdRef.current = selectedReceiptId;
 
   function setSelectedReceiptId(receiptId: number | null) {
+    if (!alive.current) return;
     autoSelectReceipt.current = false;
     selectedReceiptIdRef.current = receiptId;
     updateSelectedReceiptId(receiptId);
@@ -796,6 +828,9 @@ function RoomWorkspace({
   const token = auth.accessToken;
 
   async function refreshRoom() {
+    if (!alive.current) return;
+    const loadVersion = ++roomLoadVersion.current;
+    const stateRefresh = controller.refresh();
     setLoading(true);
     try {
       const [memberResult, receiptResult, settlementResult] = await Promise.all([
@@ -803,6 +838,7 @@ function RoomWorkspace({
         getReceipts(token, room.roomId),
         getSettlement(token, room.roomId)
       ]);
+      if (!alive.current || loadVersion !== roomLoadVersion.current) return;
       setMembers(memberResult.members);
       setReceipts(receiptResult);
       setSettlement(settlementResult);
@@ -818,11 +854,13 @@ function RoomWorkspace({
       setNotice({ kind: 'error', text: error instanceof Error ? error.message : '방 데이터를 불러오지 못했습니다.' });
       return false;
     } finally {
-      setLoading(false);
+      await stateRefresh;
+      if (alive.current && loadVersion === roomLoadVersion.current) setLoading(false);
     }
   }
 
   async function refreshReceipt(receiptId = selectedReceiptId) {
+    if (!alive.current) return;
     // A delayed mutation on an old receipt must not cancel or replace the current selection's load.
     if (receiptId !== null && receiptId !== selectedReceiptIdRef.current) return;
     const version = ++receiptLoadVersion.current;
@@ -832,7 +870,7 @@ function RoomWorkspace({
     }
     try {
       const detail = await getReceipt(token, room.roomId, receiptId);
-      if (version !== receiptLoadVersion.current || receiptId !== selectedReceiptIdRef.current) return;
+      if (!alive.current || version !== receiptLoadVersion.current || receiptId !== selectedReceiptIdRef.current) return;
       setSelectedReceipt(detail);
       setAssignees(Object.fromEntries(detail.items.map(item => [item.itemId, item.memberIds])));
     } catch (error) {
@@ -863,7 +901,7 @@ function RoomWorkspace({
   ];
 
   return (
-    <>
+    <RoomEditingContext.Provider value={{readOnly,reportError:controller.reportError}}>
       <section className="room-hero">
         <div>
           <span className="eyebrow">#{room.roomId}</span>
@@ -872,17 +910,19 @@ function RoomWorkspace({
         <div className="room-metrics">
           <Metric label="멤버" value={members.length} />
           <Metric label="영수증" value={receipts.length} />
-          <Metric label="합계" value={settlement?.ready ? formatMoney(settlement.members.reduce((sum, member) => sum + member.burden, 0)) : '확인 필요'} />
+          <Metric label="합계" value={settlementView.mode === 'confirmed' ? formatMoney(settlementView.snapshot?.members.reduce((sum, member) => sum + member.burden, 0)) : settlement?.ready ? formatMoney(settlement.members.reduce((sum, member) => sum + member.burden, 0)) : '확인 필요'} />
         </div>
       </section>
 
+      {readOnly && <p role="status">{settlementView.mode === 'confirmed' ? '정산이 확정되어 영수증과 멤버 정보는 읽기 전용입니다.' : '정산 상태 확인 중에는 입력을 수정할 수 없습니다.'}</p>}
+      {settlementView.mode === 'error' && activeTab !== 'settlement' && <p role="alert">{settlementView.error} 새로고침으로 다시 확인해주세요.</p>}
       <MemberPanel
         token={token}
         roomId={room.roomId}
         currentUserId={auth.userId}
         members={members}
         refreshRoom={refreshRoom}
-        onLeaveRoom={() => removeRoom(room.roomId)}
+        onLeaveRoom={() => { if (alive.current) removeRoom(room.roomId); }}
         setNotice={setNotice}
         className="room-member-panel"
       />
@@ -926,7 +966,17 @@ function RoomWorkspace({
         />
       )}
 
-      {activeTab === 'settlement' && <SettlementBoard settlement={settlement} />}
+      {activeTab === 'settlement' && (settlementView.mode === 'legacy' ? <SettlementBoard settlement={settlement} /> :
+        <><SettlementPanel view={settlementView} owner={members.some(member => member.owner && member.userId === auth.userId)}
+          onRefresh={() => void refreshRoom()} onConfirm={() => {
+            if (window.confirm('현재 금액으로 정산을 확정할까요? 확정 후에는 입력 수정이 잠깁니다.')) void controller.confirm();
+          }} onCompletion={(transferId,completed) => void controller.complete(transferId,completed)} onReopen={() => {
+            if (window.confirm('정산을 재개방할까요? 영수증과 멤버 정보를 다시 수정할 수 있습니다.')) void controller.reopen();
+          }} />
+          {settlementView.mode === 'confirmed' && settlementView.snapshot && members.some(member => member.owner && member.userId === auth.userId) &&
+            <SnapshotShare key={`${token}:${room.roomId}:${settlementView.snapshot.snapshotId}`} token={token} roomId={room.roomId} snapshotId={settlementView.snapshot.snapshotId}
+              disabled={settlementView.busy} onConflict={()=>void refreshRoom()}/>}
+        </>)}
 
       {activeTab === 'share' && (
         <SharePanel
@@ -935,7 +985,7 @@ function RoomWorkspace({
           setNotice={setNotice}
         />
       )}
-    </>
+    </RoomEditingContext.Provider>
   );
 }
 
@@ -968,15 +1018,20 @@ export function ReceiptsView({
   refreshReceipt: (receiptId?: number | null) => Promise<void | boolean>;
   setNotice: (notice: Notice) => void;
 }) {
+  const { readOnly, reportError } = useRoomEditing();
   const [receiptAction, setReceiptAction] = useState<number | null>(null);
   const [newDraftVersion, setNewDraftVersion] = useState(0);
   const [creationMode, setCreationMode] = useState<'image' | 'manual'>('image');
+  // Wait for the first editable state, then preserve draft/file state through temporary locks.
+  const [composerInitialized, setComposerInitialized] = useState(!readOnly);
+  useEffect(() => { if (!readOnly) setComposerInitialized(true); }, [readOnly]);
   const manualItemFormRef = useRef<HTMLFormElement>(null);
   const activeReceipt = selectedReceipt?.receiptId === selectedReceiptId && selectedReceipt?.roomId === roomId
     ? selectedReceipt : null;
   const detailLoading = selectedReceiptId !== null && activeReceipt === null;
 
   function handleNewReceiptDraft() {
+    if (readOnly) return;
     setCreationMode('image');
     setSelectedReceiptId(null);
     void refreshReceipt(null);
@@ -984,6 +1039,7 @@ export function ReceiptsView({
   }
 
   async function handleDeleteReceipt(receipt: ReceiptSummary) {
+    if (readOnly) return;
     if (!window.confirm(`${receipt.name} 영수증을 삭제할까요?\n품목과 참여자 지정도 함께 삭제됩니다.`)) {
       return;
     }
@@ -1000,6 +1056,7 @@ export function ReceiptsView({
       await refreshRoom();
       setNotice({ kind: 'success', text: '영수증을 삭제했습니다.' });
     } catch (error) {
+      reportError(error);
       setNotice({ kind: 'error', text: error instanceof Error ? error.message : '영수증 삭제에 실패했습니다.' });
     } finally {
       setReceiptAction(null);
@@ -1014,7 +1071,7 @@ export function ReceiptsView({
           title="영수증"
           count={receipts.length}
           action={
-            <button className="icon-action" type="button" title="새 영수증" aria-label="새 영수증" onClick={handleNewReceiptDraft}>
+            <button className="icon-action" type="button" title="새 영수증" aria-label="새 영수증" disabled={readOnly} onClick={handleNewReceiptDraft}>
               <Plus size={15} />
             </button>
           }
@@ -1037,7 +1094,7 @@ export function ReceiptsView({
                 className="icon-action danger"
                 type="button"
                 title="영수증 삭제"
-                disabled={receiptAction !== null}
+                disabled={readOnly || receiptAction !== null}
                 onClick={() => handleDeleteReceipt(receipt)}
               >
                 <Trash2 size={15} />
@@ -1047,7 +1104,7 @@ export function ReceiptsView({
         </div>
       </div>
 
-      {selectedReceiptId === null && <section className="receipt-composer" aria-label="새 영수증 입력">
+      {composerInitialized && selectedReceiptId === null && <section className="receipt-composer" aria-label="새 영수증 입력" hidden={readOnly}>
         <div className="receipt-entry-tabs" role="group" aria-label="새 영수증 입력 방식">
           <button type="button" aria-pressed={creationMode === 'image'} onClick={() => setCreationMode('image')}>영수증 사진 첨부</button>
           <button type="button" aria-pressed={creationMode === 'manual'} onClick={() => setCreationMode('manual')}>수동입력</button>
@@ -1117,6 +1174,7 @@ export function ManualReceiptPanel({
   refreshReceipt: (receiptId?: number | null) => Promise<void | boolean>;
   setNotice: (notice: Notice) => void;
 }) {
+  const { readOnly, reportError } = useRoomEditing();
   const [name, setName] = useState(DEFAULT_RECEIPT_NAME);
   const [payerMemberId, setPayerMemberId] = useState('');
   const [participantIds, setParticipantIds] = useState<number[]>([]);
@@ -1165,6 +1223,7 @@ export function ManualReceiptPanel({
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
+    if (readOnly) return;
     setSubmitting(true);
     setNotice(null);
     try {
@@ -1188,6 +1247,7 @@ export function ManualReceiptPanel({
       await refreshReceipt(created.receiptId);
       setNotice({ kind: 'success', text: '영수증을 추가했습니다.' });
     } catch (error) {
+      reportError(error);
       setNotice({
         kind: 'error',
         text: error instanceof Error ? error.message : isEditing ? '영수증 수정에 실패했습니다.' : '영수증 추가에 실패했습니다.'
@@ -1199,7 +1259,7 @@ export function ManualReceiptPanel({
 
   return (
     <form className="panel manual-panel" onSubmit={handleSubmit}>
-      <fieldset className="receipt-fieldset" disabled={submitting}>
+      <fieldset className="receipt-fieldset" disabled={readOnly || submitting}>
         <PanelHeader icon={<Plus size={19} />} title={isEditing ? "영수증 수정" : "수동 입력"} />
         {!isEditing && <p className="draft-help">새 영수증을 작성하고 있습니다. 저장하면 해당 영수증의 상세 내역이 표시됩니다. 기존 영수증에 품목을 추가하려면 목록에서 해당 영수증을 선택하세요.</p>}
         <Field label="상호명">
@@ -1334,7 +1394,7 @@ export function ManualReceiptPanel({
           <Plus size={17} />
           품목 추가
         </button>
-        <button className="button blue full-width" type="submit" disabled={submitting}>
+        <button className="button blue full-width" type="submit" disabled={readOnly || submitting}>
           {submitting ? '저장 중' : isEditing ? '영수증 수정' : '영수증 저장'}
           <Check size={17} />
         </button>
@@ -1366,6 +1426,7 @@ function ReceiptDetailPanel({
   refreshReceipt: (receiptId?: number | null) => Promise<void | boolean>;
   setNotice: (notice: Notice) => void;
 }) {
+  const { readOnly, reportError } = useRoomEditing();
   const [editPayerMemberId, setEditPayerMemberId] = useState('');
   const [savingReceiptMeta, setSavingReceiptMeta] = useState(false);
   const [savingAssigneeItemId, setSavingAssigneeItemId] = useState<number | null>(null);
@@ -1390,6 +1451,7 @@ function ReceiptDetailPanel({
     currentReceipt.payerMemberId === null || payerMembers.some((member) => member.memberId === currentReceipt.payerMemberId);
 
   async function handleUpdateReceiptPayer(nextPayerMemberId: string) {
+    if (readOnly) return;
     setEditPayerMemberId(nextPayerMemberId);
     setSavingReceiptMeta(true);
     setNotice(null);
@@ -1403,6 +1465,7 @@ function ReceiptDetailPanel({
       await refreshRoom();
       setNotice({ kind: 'success', text: '결제자를 수정했습니다.' });
     } catch (error) {
+      reportError(error);
       setEditPayerMemberId(currentReceipt.payerMemberId !== null ? String(currentReceipt.payerMemberId) : '');
       setNotice({ kind: 'error', text: error instanceof Error ? error.message : '결제자 수정에 실패했습니다.' });
     } finally {
@@ -1411,6 +1474,7 @@ function ReceiptDetailPanel({
   }
 
   async function toggleAssignee(itemId: number, memberId: number, selectedIds: number[]) {
+    if (readOnly) return;
     const nextIds = selectedIds.includes(memberId)
       ? selectedIds.filter((id) => id !== memberId)
       : [...selectedIds, memberId];
@@ -1424,6 +1488,7 @@ function ReceiptDetailPanel({
       await refreshRoom();
       setNotice({ kind: 'success', text: '참여자를 저장했습니다.' });
     } catch (error) {
+      reportError(error);
       await refreshReceipt(currentReceipt.receiptId);
       setNotice({ kind: 'error', text: error instanceof Error ? error.message : '참여자 저장에 실패했습니다.' });
     } finally {
@@ -1432,12 +1497,14 @@ function ReceiptDetailPanel({
   }
 
   async function removeItem(itemId: number) {
+    if (readOnly) return;
     try {
       await deleteItem(token, roomId, currentReceipt.receiptId, itemId);
       await refreshReceipt(currentReceipt.receiptId);
       await refreshRoom();
       setNotice({ kind: 'success', text: '품목을 삭제했습니다.' });
     } catch (error) {
+      reportError(error);
       setNotice({ kind: 'error', text: error instanceof Error ? error.message : '품목 삭제에 실패했습니다.' });
     }
   }
@@ -1454,7 +1521,7 @@ function ReceiptDetailPanel({
           <select
             value={editPayerMemberId}
             onChange={(event) => handleUpdateReceiptPayer(event.target.value)}
-            disabled={savingReceiptMeta}
+            disabled={readOnly || savingReceiptMeta}
           >
             <option value="">미지정</option>
             {!currentPayerInMembers && currentReceipt.payerMemberId !== null && (
@@ -1500,7 +1567,7 @@ function ReceiptDetailPanel({
                       type="button"
                       className={`member-chip ${checked ? 'active' : ''}`}
                       key={member.memberId}
-                      disabled={savingAssigneeItemId !== null || item.excludedFromSettlement}
+                      disabled={readOnly || savingAssigneeItemId !== null || item.excludedFromSettlement}
                       onClick={() => toggleAssignee(item.itemId, member.memberId, selected)}
                     >
                       {member.nickname}
@@ -1509,7 +1576,7 @@ function ReceiptDetailPanel({
                 })}
               </div>
               <div className="row-actions">
-                <button className="button text-danger dense" type="button" onClick={() => removeItem(item.itemId)}>
+                <button className="button text-danger dense" type="button" disabled={readOnly} onClick={() => removeItem(item.itemId)}>
                   삭제
                 </button>
               </div>
@@ -1696,6 +1763,7 @@ function MemberPanel({
   setNotice: (notice: Notice) => void;
   className?: string;
 }) {
+  const { readOnly, reportError } = useRoomEditing();
   const [manualName, setManualName] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [editingMemberId, setEditingMemberId] = useState<number | null>(null);
@@ -1704,6 +1772,7 @@ function MemberPanel({
 
   async function handleAddManualMember(event: FormEvent) {
     event.preventDefault();
+    if (readOnly) return;
     setSubmitting(true);
     setNotice(null);
     try {
@@ -1712,6 +1781,7 @@ function MemberPanel({
       await refreshRoom();
       setNotice({ kind: 'success', text: '수동 멤버를 추가했습니다.' });
     } catch (error) {
+      reportError(error);
       setNotice({ kind: 'error', text: error instanceof Error ? error.message : '수동 멤버 추가에 실패했습니다.' });
     } finally {
       setSubmitting(false);
@@ -1719,12 +1789,14 @@ function MemberPanel({
   }
 
   function startEditing(member: RoomMember) {
+    if (readOnly) return;
     setEditingMemberId(member.memberId);
     setEditingName(member.nickname);
   }
 
   async function handleUpdateMemberName(event: FormEvent) {
     event.preventDefault();
+    if (readOnly) return;
     if (!editingMemberId) {
       return;
     }
@@ -1738,6 +1810,7 @@ function MemberPanel({
       await refreshRoom();
       setNotice({ kind: 'success', text: '멤버 이름을 수정했습니다.' });
     } catch (error) {
+      reportError(error);
       setNotice({ kind: 'error', text: error instanceof Error ? error.message : '멤버 이름 수정에 실패했습니다.' });
     } finally {
       setMemberAction(null);
@@ -1745,6 +1818,7 @@ function MemberPanel({
   }
 
   async function handleDeleteMember(member: RoomMember) {
+    if (readOnly) return;
     const deletingSelf = member.userId === currentUserId;
     const confirmMessage = deletingSelf
       ? `${member.nickname} 계정으로 이 방에서 나갈까요?\n초대 토큰으로 다시 참여할 수 있습니다.`
@@ -1770,6 +1844,7 @@ function MemberPanel({
       await refreshRoom();
       setNotice({ kind: 'success', text: '멤버를 방에서 제외했습니다.' });
     } catch (error) {
+      reportError(error);
       setNotice({ kind: 'error', text: error instanceof Error ? error.message : '멤버 제외에 실패했습니다.' });
     } finally {
       setMemberAction(null);
@@ -1780,14 +1855,14 @@ function MemberPanel({
     <section className={`panel member-panel ${className}`}>
       <PanelHeader icon={<Users size={19} />} title="멤버" count={members.length} />
       <form className="manual-member-form" onSubmit={handleAddManualMember}>
-        <input
+        <input disabled={readOnly}
           value={manualName}
           onChange={(event) => setManualName(event.target.value)}
           placeholder="멤버 이름 수동 입력"
           maxLength={50}
           required
         />
-        <button className="button primary dense" type="submit" disabled={submitting}>
+        <button className="button primary dense" type="submit" disabled={readOnly || submitting}>
           {submitting ? '추가 중' : '추가'}
         </button>
       </form>
@@ -1800,21 +1875,21 @@ function MemberPanel({
             <div className={`member-row ${editing ? 'editing' : ''}`} key={member.memberId}>
               {editing ? (
                 <form className="member-edit-form" onSubmit={handleUpdateMemberName}>
-                  <input
+                  <input disabled={readOnly}
                     value={editingName}
                     onChange={(event) => setEditingName(event.target.value)}
                     maxLength={50}
                     required
                     autoFocus
                   />
-                  <button className="button blue dense" type="submit" disabled={memberAction !== null}>
+                  <button className="button blue dense" type="submit" disabled={readOnly || memberAction !== null}>
                     <Check size={15} />
                     저장
                   </button>
                   <button
                     className="button ghost dense"
                     type="button"
-                    disabled={memberAction !== null}
+                    disabled={readOnly || memberAction !== null}
                     onClick={() => {
                       setEditingMemberId(null);
                       setEditingName('');
@@ -1835,7 +1910,7 @@ function MemberPanel({
                       className="icon-action"
                       type="button"
                       title="이름 수정"
-                      disabled={memberAction !== null}
+                      disabled={readOnly || memberAction !== null}
                       onClick={() => startEditing(member)}
                     >
                       <Pencil size={15} />
@@ -1845,7 +1920,7 @@ function MemberPanel({
                         className="icon-action danger"
                         type="button"
                         title={deletingSelf ? '방 나가기' : '멤버 제외'}
-                        disabled={memberAction !== null}
+                        disabled={readOnly || memberAction !== null}
                         onClick={() => handleDeleteMember(member)}
                       >
                         <Trash2 size={15} />

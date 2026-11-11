@@ -22,12 +22,13 @@ class BaselineMigrationTest {
 
     @Test void createsTheWholeSchemaOnce() throws Exception {
         var flyway=flyway();
-        assertThat(flyway.migrate().migrationsExecuted).isEqualTo(3);
+        assertThat(flyway.migrate().migrationsExecuted).isEqualTo(4);
         assertThat(flyway.migrate().migrationsExecuted).isZero();
-        assertThat(values("SELECT version FROM flyway_schema_history WHERE success")).containsExactly("1","2","3");
+        assertThat(values("SELECT version FROM flyway_schema_history WHERE success")).containsExactly("1","2","3","4");
         assertThat(values("SELECT table_name FROM information_schema.tables WHERE table_schema='public' AND table_name <> 'flyway_schema_history'"))
             .containsExactlyInAnyOrder("users","rooms","room_members","room_invite_tokens","room_share_tokens",
-                "receipts","items","assignments","receipt_images","ocr_jobs","ocr_job_images","ocr_drafts","ocr_draft_items","ocr_draft_item_members","ocr_daily_usage");
+                "receipts","items","assignments","receipt_images","ocr_jobs","ocr_job_images","ocr_drafts","ocr_draft_items","ocr_draft_item_members","ocr_daily_usage","room_settlement_states","settlement_snapshots",
+                "settlement_snapshot_members","settlement_transfers","settlement_snapshot_share_tokens");
         assertThat(values("SELECT convalidated::text FROM pg_constraint WHERE conname IN ('ck_items_money_contract','ck_receipts_declared_total_contract')"))
             .containsExactly("true","true");
     }

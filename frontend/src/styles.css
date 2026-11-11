@@ -629,7 +629,7 @@ select:focus {
 .receipt-entry-tabs button { border: 1px solid var(--hairline); border-radius: var(--radius-full); padding: 12px 20px; background: var(--canvas); color: var(--ink); }
 .receipt-entry-tabs button[aria-pressed="true"] { background: var(--primary); color: white; border-color: var(--primary); }
 .receipt-entry-pane { min-width: 0; }
-.receipt-entry-pane[hidden] { display: none; }
+.receipt-entry-pane[hidden], .receipt-composer[hidden] { display: none; }
 .manual-item-form { display: grid; gap: 12px; scroll-margin-top: 130px; }
 .manual-item-form p { line-height: 1.6; }
 
@@ -1477,3 +1477,14 @@ select:focus {
 }
 
 .ocr-panel, .receipt-image-viewer { scroll-margin-top: 130px; }
+
+.shared-snapshot-page { max-width: 860px; margin: 0 auto; padding: 36px 20px; }
+.shared-snapshot-page header { margin-bottom: 24px; }
+.shared-snapshot-page h1 { font-size: 30px; }
+.shared-reopened { padding: 14px; border-radius: 12px; background: #fff4d8; color: #634812; }
+.snapshot-share { padding: 24px; background: #fff; border: 1px solid var(--line); border-radius: 18px; margin-top: 16px; overflow-wrap: anywhere; }
+.snapshot-share p { line-height: 1.6; }
+.shared-link-label { display: block; margin: 14px 0; }
+.shared-link-label input { width: 100%; min-width: 0; margin-top: 8px; }
+.shared-snapshot-page .settlement-row { overflow-wrap: anywhere; }
+@media (max-width: 600px) { .shared-snapshot-page { padding: 24px 14px; } .shared-snapshot-page .settlement-row { grid-template-columns: 1fr; gap: 6px; } }

@@ -27,6 +27,7 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
 public class ReceiptService {
+    private final com.capstone.itemsplit.settlement.RoomEditGuard roomEditGuard;
     private final ReceiptRepository receiptRepository;
     private final ItemRepository itemRepository;
     private final AssignmentRepository assignmentRepository;
@@ -43,6 +44,7 @@ public class ReceiptService {
     public ReceiptDetailResult createManualReceipt(Long roomId, Long userId, String requestId,
         String name, Long payerMemberId, LocalDate purchasedAt, List<SaveItemCommand> commands) {
         Room room = roomAuthorizationService.checkMemberForUpdate(roomId, userId);
+        roomEditGuard.requireEditable(room);
         if (requestId == null || requestId.isBlank() || requestId.length() > 64) throw invalid("생성 요청 식별자가 필요합니다.");
         if (commands.stream().anyMatch(item -> item.itemId() != null)) throw invalid("새 영수증의 품목 ID는 비워 두어야 합니다.");
         String fingerprint = fingerprint(name, payerMemberId, purchasedAt, commands);
@@ -81,7 +83,7 @@ public class ReceiptService {
     @Transactional
     public ReceiptDetailResult updateReceipt(Long roomId, Long receiptId, Long userId, String name,
         Long payerMemberId, LocalDate purchasedAt) {
-        roomAuthorizationService.checkMemberForUpdate(roomId, userId);
+        roomEditGuard.requireEditable(roomAuthorizationService.checkMemberForUpdate(roomId, userId));
         Receipt receipt = findReceiptInRoom(roomId, receiptId);
         receipt.update(name.trim(), resolvePayer(roomId, payerMemberId), purchasedAt);
         return detail(receipt);
@@ -90,7 +92,7 @@ public class ReceiptService {
     @Transactional
     public ReceiptDetailResult saveContents(Long roomId, Long receiptId, Long userId, String name,
         Long payerMemberId, LocalDate purchasedAt, List<SaveItemCommand> commands) {
-        roomAuthorizationService.checkMemberForUpdate(roomId, userId);
+        Room room = roomAuthorizationService.checkMemberForUpdate(roomId, userId);
         Receipt receipt = findReceiptInRoom(roomId, receiptId);
         RoomMember payer = resolvePayer(roomId, payerMemberId);
         for (Item item : itemRepository.findAllByReceiptId(receiptId)) {
@@ -98,6 +100,7 @@ public class ReceiptService {
             if(command==null || !item.getName().equals(command.name().trim()) || item.getPrice()!=command.price() || item.getQuantity()!=command.quantity())
                 item.requireOcrEditor(userId);
         }
+        roomEditGuard.requireEditable(room);
         validateCommands(roomId, receiptId, commands);
         receipt.update(name.trim(), payer, purchasedAt);
         replaceItems(roomId, receipt, commands);
@@ -154,7 +157,7 @@ public class ReceiptService {
 
     @Transactional
     public void deleteReceipt(Long roomId, Long receiptId, Long userId) {
-        roomAuthorizationService.checkMemberForUpdate(roomId, userId);
+        roomEditGuard.requireEditable(roomAuthorizationService.checkMemberForUpdate(roomId, userId));
         Receipt receipt = findReceiptInRoom(roomId, receiptId);
         ocrQuotas.releaseUncalledForReceipts(List.of(receiptId));
         receiptImageRepository.findAllByReceiptId(receiptId)

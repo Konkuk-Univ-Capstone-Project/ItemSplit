@@ -21,6 +21,7 @@ import org.springframework.web.multipart.MultipartFile;
 @Profile("ocr-demo & !prod")
 @ConditionalOnProperty(name={"app.ocr.enabled","app.ocr.demo-enabled"},havingValue="true")
 public class OcrDemoService {
+    private final com.capstone.itemsplit.settlement.RoomEditGuard roomEditGuard;
     private final RoomAuthorizationService authorization;
     private final ReceiptImageService uploads;
     private final ReceiptImageRepository images;
@@ -28,7 +29,7 @@ public class OcrDemoService {
 
     @Transactional
     public DemoReceipt create(Long roomId,Long userId,String name,List<FakeOcrScenario> scenarios) {
-        authorization.checkMemberForUpdate(roomId,userId);
+        roomEditGuard.requireEditable(authorization.checkMemberForUpdate(roomId,userId));
         if(scenarios==null || scenarios.isEmpty() || scenarios.size()>3 || scenarios.stream().anyMatch(Objects::isNull)) {
             throw OcrService.invalid("시나리오는 1~3개 필요합니다.");
         }

@@ -40,7 +40,7 @@ class AssignmentMemberRequiredMigrationTest {
 
     @Test
     void cleanDataMigratesAndTheColumnRejectsNull() {
-        assertThat(flyway(null).migrate().migrationsExecuted).isEqualTo(1);
+        assertThat(flyway(null).migrate().migrationsExecuted).isEqualTo(2);
 
         assertThat(memberColumnNullable()).isFalse();
         assertThat(count("SELECT count(*) FROM assignments")).isEqualTo(2);
@@ -63,7 +63,7 @@ class AssignmentMemberRequiredMigrationTest {
         assertThat(count("SELECT count(*) FROM assignments")).as("nothing deleted").isEqualTo(3);
 
         execute("DELETE FROM assignments WHERE room_member_id IS NULL");
-        assertThat(flyway(null).migrate().migrationsExecuted).isEqualTo(1);
+        assertThat(flyway(null).migrate().migrationsExecuted).isEqualTo(2);
         assertThat(memberColumnNullable()).isFalse();
     }
 
@@ -77,12 +77,12 @@ class AssignmentMemberRequiredMigrationTest {
         assertStillAtV2();
 
         execute("UPDATE assignments SET room_member_id = 2 WHERE room_member_id = 3");
-        assertThat(flyway(null).migrate().migrationsExecuted).isEqualTo(1);
+        assertThat(flyway(null).migrate().migrationsExecuted).isEqualTo(2);
     }
 
     private void assertStillAtV2() {
         assertThat(flyway(null).info().current().getVersion().getVersion()).isEqualTo("2");
-        assertThat(count("SELECT count(*) FROM flyway_schema_history WHERE version = '3'")).isZero();
+        assertThat(count("SELECT count(*) FROM flyway_schema_history WHERE version IN ('3','4')")).isZero();
         assertThat(memberColumnNullable()).isTrue();
     }
 
