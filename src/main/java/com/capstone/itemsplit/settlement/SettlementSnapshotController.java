@@ -34,6 +34,14 @@ public class SettlementSnapshotController {
         @AuthenticationPrincipal AuthenticatedUser user) {
         return ApiResponse.success(service.reopen(roomId,snapshotId,userId(user)));
     }
+    @PutMapping("/settlement-snapshots/{snapshotId}/transfers/{transferId}/completion")
+    public ApiResponse<SettlementSnapshotService.TransferView> completion(@PathVariable Long roomId,@PathVariable Long snapshotId,
+        @PathVariable Long transferId,@AuthenticationPrincipal AuthenticatedUser user,@RequestBody com.fasterxml.jackson.databind.JsonNode body) {
+        Long actor=userId(user);
+        if(body==null || !body.isObject() || !body.path("completed").isBoolean())
+            throw new ApiException(ErrorCode.VALIDATION_ERROR);
+        return ApiResponse.success(service.completion(roomId,snapshotId,transferId,actor,body.path("completed").booleanValue()));
+    }
     private Long userId(AuthenticatedUser user) {
         if(user==null) throw new ApiException(ErrorCode.UNAUTHORIZED);
         return user.id();

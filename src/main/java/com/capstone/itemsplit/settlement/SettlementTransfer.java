@@ -15,6 +15,12 @@ public class SettlementTransfer {
     @Column(nullable=false,length=20) private String status;
     private Long updatedByUserId;
     private LocalDateTime updatedAt;
+    void setCompleted(boolean completed,Long actor) {
+        String target=completed?"COMPLETED":"PENDING";
+        if(target.equals(status)) return;
+        status=target;updatedByUserId=actor;
+        updatedAt=LocalDateTime.now().truncatedTo(java.time.temporal.ChronoUnit.MICROS);
+    }
     static SettlementTransfer create(SettlementSnapshot snapshot,SettlementTransferCalculator.Transfer source) {
         SettlementTransfer row=new SettlementTransfer();row.snapshot=snapshot;row.fromMemberId=source.fromMemberId();
         row.toMemberId=source.toMemberId();row.amount=source.amount();row.status="PENDING";return row;

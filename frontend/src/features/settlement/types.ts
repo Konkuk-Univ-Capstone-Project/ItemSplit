@@ -12,4 +12,5 @@ export type Snapshot = {
 export type SettlementView = {
   mode: 'loading' | 'open' | 'confirmed' | 'legacy' | 'error'; state: SettlementState | null;
   preview: Preview | null; snapshot: Snapshot | null; busy: boolean; error: string;
+  completionAttempt?: {snapshotId: number; transferId: number; completed: boolean} | null;
 };

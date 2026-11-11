@@ -215,6 +215,49 @@ class SettlementConfirmationApiTest {
         confirm(owner,"","").andExpect(status().isBadRequest())
             .andExpect(jsonPath("$.error.details[0].reason").value("SETTLEMENT_NOT_READY"));
     }
+    @Test void completionIsExplicitIdempotentAndKeepsCancellationAudit() throws Exception {
+        JsonNode snapshot=data(confirm(owner,"completion",preview().path("previewToken").asText()).andExpect(status().isCreated()));
+        long id=snapshot.path("snapshotId").asLong(), transfer=snapshot.path("transfers").get(0).path("transferId").asLong();
+        JsonNode pending=data(completion(id,transfer,owner,"{\"completed\":false}").andExpect(status().isOk()));
+        assertThat(pending.path("updatedAt").isNull()).isTrue();
+        JsonNode completed=data(completion(id,transfer,owner,"{\"completed\":true}").andExpect(status().isOk()));
+        assertThat(completed.path("status").asText()).isEqualTo("COMPLETED");
+        assertThat(completed.path("updatedByUserId").asLong()).isEqualTo(owner.getId());
+        assertThat(java.time.LocalDateTime.parse(completed.path("updatedAt").asText()).getNano()%1000).isZero();
+        assertThat(data(completion(id,transfer,owner,"{\"completed\":true}").andExpect(status().isOk()))).isEqualTo(completed);
+        JsonNode cancelled=data(completion(id,transfer,owner,"{\"completed\":false}").andExpect(status().isOk()));
+        assertThat(cancelled.path("status").asText()).isEqualTo("PENDING");
+        assertThat(cancelled.path("updatedByUserId").asLong()).isEqualTo(owner.getId());
+        assertThat(cancelled.path("updatedAt").isNull()).isFalse();
+        assertThat(data(completion(id,transfer,owner,"{\"completed\":false}").andExpect(status().isOk()))).isEqualTo(cancelled);
+    }
+    @Test void completionValidatesPayloadAuthorityScopeAndHistoricalVersion() throws Exception {
+        JsonNode snapshot=data(confirm(owner,"completion",preview().path("previewToken").asText()).andExpect(status().isCreated()));
+        long id=snapshot.path("snapshotId").asLong(), transfer=snapshot.path("transfers").get(0).path("transferId").asLong();
+        for(String body:List.of("{}","{\"completed\":null}","{\"completed\":\"true\"}","{\"completed\":1}","null","[]"))
+            completion(id,transfer,owner,body).andExpect(status().isBadRequest());
+        completion(id,transfer,guest,"{\"completed\":true}").andExpect(status().isForbidden());
+        completion(id,transfer,outsider,"{\"completed\":true}").andExpect(status().isForbidden());
+        mvc.perform(put("/api/rooms/{room}/settlement-snapshots/{id}/transfers/{transfer}/completion",room.getId(),id,transfer)
+            .contentType(MediaType.APPLICATION_JSON).content("{\"completed\":true}")).andExpect(status().isUnauthorized());
+        completion(id,Long.MAX_VALUE,owner,"{\"completed\":true}").andExpect(status().isNotFound());
+        Room other=rooms.save(Room.create("other",owner));members.save(RoomMember.create(other,owner));
+        mvc.perform(put("/api/rooms/{room}/settlement-snapshots/{id}/transfers/{transfer}/completion",other.getId(),id,transfer)
+            .header("Authorization",bearer(owner)).contentType(MediaType.APPLICATION_JSON).content("{\"completed\":true}")).andExpect(status().isNotFound());
+        JsonNode completed=data(completion(id,transfer,owner,"{\"completed\":true}").andExpect(status().isOk()));
+        mvc.perform(post("/api/rooms/{room}/settlement-snapshots/{id}/reopen",room.getId(),id).header("Authorization",bearer(owner))).andExpect(status().isOk());
+        completion(id,transfer,owner,"{\"completed\":false}").andExpect(status().isConflict())
+            .andExpect(jsonPath("$.error.details[0].reason").value("SETTLEMENT_VERSION_CONFLICT"));
+        JsonNode second=data(confirm(owner,"second",preview().path("previewToken").asText()).andExpect(status().isCreated()));
+        assertThat(second.path("transfers").get(0).path("status").asText()).isEqualTo("PENDING");
+        completion(second.path("snapshotId").asLong(),transfer,owner,"{\"completed\":true}").andExpect(status().isNotFound());
+        completion(id,transfer,owner,"{\"completed\":true}").andExpect(status().isConflict());
+        assertThat(data(read("/settlement-snapshots/"+id,owner)).path("transfers").get(0)).isEqualTo(completed);
+    }
+    ResultActions completion(long snapshot,long transfer,User user,String body) throws Exception {
+        return mvc.perform(put("/api/rooms/{room}/settlement-snapshots/{snapshot}/transfers/{transfer}/completion",room.getId(),snapshot,transfer)
+            .header("Authorization",bearer(user)).contentType(MediaType.APPLICATION_JSON).content(body));
+    }
     JsonNode preview() throws Exception {return data(read("/settlements/confirmation-preview",owner).andExpect(status().isOk()));}
     ResultActions read(String suffix,User user) throws Exception {return mvc.perform(get("/api/rooms/"+room.getId()+suffix).header("Authorization",bearer(user)));}
     ResultActions confirm(User user,String request,String token) throws Exception {

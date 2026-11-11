@@ -138,3 +138,79 @@ test('a known confirmed edit conflict cannot be downgraded to editable legacy mo
   assert.equal(editingBlocked(c.getSnapshot()),true);
   assert.equal(c.getSnapshot().mode,'error');
 });
+
+test('completion sends explicit PUT and retries the same intent after a lost response, despite refreshed completed status', async t => {
+  let completed = false; const writes: RequestInit[] = [];
+  t.mock.method(globalThis,'fetch',async (url,options) => {
+    if (options.method === 'PUT') {
+      writes.push(options); completed = JSON.parse(options.body).completed;
+      if (writes.length === 1) throw new TypeError('response lost');
+      return response({...snapshot.transfers[0],status:completed?'COMPLETED':'PENDING'});
+    }
+    return response(String(url).endsWith('/settlement-state') ? {...open,status:'CONFIRMED',currentSnapshotId:9} :
+      {...snapshot,transfers:[{...snapshot.transfers[0],status:completed?'COMPLETED':'PENDING'}]});
+  });
+  const c = new SettlementController('t',1); await c.refresh();
+  await c.complete(2,true);
+  assert.equal(c.getSnapshot().snapshot?.transfers[0].status,'COMPLETED');
+  assert.deepEqual(c.getSnapshot().completionAttempt,{snapshotId:9,transferId:2,completed:true});
+  const html=renderToStaticMarkup(<SettlementPanel view={c.getSnapshot()} owner onRefresh={()=>{}} onConfirm={()=>{}} onReopen={()=>{}} onCompletion={()=>{}}/>);
+  assert.match(html,/완료 표시 재시도/); assert.doesNotMatch(html,/>완료 취소</);
+  await c.complete(2,false); // Even a stale/inverse caller cannot replace an unresolved intent.
+  assert.equal(writes.length,1);
+  await c.complete(2,true);
+  assert.equal(writes[0].method,'PUT'); assert.equal(writes[0].body,writes[1].body);
+  assert.equal(c.getSnapshot().completionAttempt,null);
+});
+
+test('completion global busy guard prevents duplicate writes; conflict refresh removes obsolete controls', async t => {
+  let finish!: (value: Response) => void; let writes=0; let reopened=false;
+  t.mock.method(globalThis,'fetch',async (url,options) => {
+    if(options.method==='PUT') {writes++; return new Promise<Response>(r=>{finish=r;});}
+    if(String(url).endsWith('/settlement-state')) return response(reopened?open:{...open,status:'CONFIRMED',currentSnapshotId:9});
+    return response(reopened?preview:snapshot);
+  });
+  const c=new SettlementController('t',1);await c.refresh();
+  const pending=c.complete(2,true);await c.complete(2,true);await c.reopen();assert.equal(writes,1);
+  const html=renderToStaticMarkup(<SettlementPanel view={c.getSnapshot()} owner onRefresh={()=>{}} onConfirm={()=>{}} onReopen={()=>{}} onCompletion={()=>{}}/>);
+  assert.match(html,/<button[^>]*disabled[^>]*>완료 표시<\/button>/);
+  reopened=true;finish(new Response(JSON.stringify({error:{message:'conflict',details:[{reason:'SETTLEMENT_VERSION_CONFLICT'}]}}),{status:409}));await pending;
+  assert.equal(c.getSnapshot().mode,'open');assert.equal(c.getSnapshot().completionAttempt,null);
+});
+
+test('completion controls are owner-only and explain manual recording', () => {
+  const view={mode:'confirmed' as const,state:{...open,status:'CONFIRMED' as const,currentSnapshotId:9},preview:null,snapshot,busy:false,error:''};
+  const props={view,onRefresh:()=>{},onConfirm:()=>{},onReopen:()=>{},onCompletion:()=>{}};
+  const member=renderToStaticMarkup(<SettlementPanel {...props} owner={false}/>);
+  assert.match(member,/미완료/);assert.match(member,/실제 은행 입금 확인/);assert.doesNotMatch(member,/>완료 표시</);
+  assert.match(renderToStaticMarkup(<SettlementPanel {...props} owner/>),/>완료 표시</);
+});
+
+test('mutation response from a disposed account lifetime cannot refresh or unlock its replacement', async t => {
+  let release!: (value: Response) => void; let reads=0;
+  t.mock.method(globalThis,'fetch',async (url,options) => {
+    if(options.method==='PUT') return new Promise<Response>(r=>{release=r;});
+    reads++;
+    return response(String(url).endsWith('/settlement-state') ? {...open,status:'CONFIRMED',currentSnapshotId:9} : snapshot);
+  });
+  const c=new SettlementController('t',1);await c.refresh();const pending=c.complete(2,true);
+  c.dispose();c.activate();await c.refresh();
+  assert.equal(c.getSnapshot().busy,false);
+  assert.equal(c.getSnapshot().completionAttempt,null);
+  assert.equal(c.getSnapshot().mode,'confirmed');
+  const before=reads;release(response(snapshot.transfers[0]));await pending;assert.equal(reads,before);
+});
+
+test('refresh failure hides completion controls and a mismatched snapshot is never editable', async t => {
+  let fail=false;let mismatch=false;
+  t.mock.method(globalThis,'fetch',async (url,options) => {
+    if(options.method==='PUT') {fail=true;throw new TypeError('offline');}
+    if(fail) return response(null,500);
+    return response(String(url).endsWith('/settlement-state') ? {...open,status:'CONFIRMED',currentSnapshotId:9} : {...snapshot,roomId:mismatch?2:1});
+  });
+  const c=new SettlementController('t',1);await c.refresh();await c.complete(2,true);
+  assert.equal(c.getSnapshot().mode,'error');
+  const html=renderToStaticMarkup(<SettlementPanel view={c.getSnapshot()} owner onRefresh={()=>{}} onConfirm={()=>{}} onReopen={()=>{}} onCompletion={()=>{}}/>);
+  assert.doesNotMatch(html,/>완료 표시/);
+  fail=false;mismatch=true;await c.refresh();assert.equal(c.getSnapshot().mode,'error');
+});

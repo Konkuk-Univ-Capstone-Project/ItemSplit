@@ -74,6 +74,26 @@ public class SettlementSnapshotService {
         snapshot.reopen(userId);state.reopen();
         return new StateView(roomId,"OPEN",null);
     }
+    public TransferView completion(Long roomId,Long snapshotId,Long transferId,Long userId,boolean completed) {
+        Room room=authorization.checkMemberForUpdate(roomId,userId);
+        if(!room.getOwner().getId().equals(userId))
+            throw new SettlementRequestException(ErrorCode.FORBIDDEN,"FORBIDDEN","방장만 송금 완료 상태를 변경할 수 있습니다.");
+        var state=loadState(roomId);
+        var snapshot=snapshots.findByIdAndRoomId(snapshotId,roomId).orElseThrow(()->new ApiException(ErrorCode.NOT_FOUND));
+        entityManager.flush();entityManager.refresh(snapshot);
+        var transfer=snapshot.getTransfers().stream().filter(t->transferId.equals(t.getId())).findFirst()
+            .orElseThrow(()->new ApiException(ErrorCode.NOT_FOUND));
+        if(state==null || !"CONFIRMED".equals(state.getStatus()) || !snapshotId.equals(state.getCurrentSnapshotId())
+            || !"CONFIRMED".equals(snapshot.getStatus()))
+            throw conflict("SETTLEMENT_VERSION_CONFLICT","현재 확정된 정산만 완료 상태를 변경할 수 있습니다.");
+        entityManager.refresh(transfer);
+        transfer.setCompleted(completed,userId);
+        return transferView(transfer);
+    }
+    private static TransferView transferView(SettlementTransfer transfer) {
+        return new TransferView(transfer.getId(),transfer.getFromMemberId(),transfer.getToMemberId(),transfer.getAmount(),
+            transfer.getStatus(),transfer.getUpdatedByUserId(),transfer.getUpdatedAt());
+    }
     private RoomSettlementState loadState(Long roomId) {
         var state=states.findById(roomId).orElse(null);
         if(state!=null) {entityManager.flush();entityManager.refresh(state);}
@@ -95,7 +115,7 @@ public class SettlementSnapshotService {
         return new SnapshotView(snapshot.getId(),snapshot.getRoom().getId(),snapshot.getRoomName(),snapshot.getVersion(),snapshot.getStatus(),
             snapshot.getConfirmedByUserId(),snapshot.getConfirmedAt(),snapshot.getReopenedByUserId(),snapshot.getReopenedAt(),
             snapshot.getMembers().stream().map(m->new MemberView(m.getMemberId(),m.getDisplayName(),m.getPaid(),m.getBurden(),m.getNet())).toList(),
-            snapshot.getTransfers().stream().map(t->new TransferView(t.getId(),t.getFromMemberId(),t.getToMemberId(),t.getAmount(),t.getStatus(),t.getUpdatedByUserId(),t.getUpdatedAt())).toList());
+            snapshot.getTransfers().stream().map(SettlementSnapshotService::transferView).toList());
     }
     private static SettlementRequestException conflict(String reason,String message) {return new SettlementRequestException(ErrorCode.CONFLICT,reason,message);}
     public record ConfirmRequest(String requestId,String previewToken) { }

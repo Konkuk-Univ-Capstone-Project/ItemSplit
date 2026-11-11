@@ -28,6 +28,7 @@ import static org.awaitility.Awaitility.await;
 class SettlementSnapshotPostgresTest {
     @Container @ServiceConnection static final PostgreSQLContainer<?> postgres=new PostgreSQLContainer<>("postgres:16-alpine");
     @Autowired SettlementSnapshotService service;
+    @Autowired jakarta.persistence.EntityManager entityManager;
     @Autowired UserRepository users;
     @Autowired RoomRepository rooms;
     @Autowired RoomMemberRepository members;
@@ -204,9 +205,7 @@ class SettlementSnapshotPostgresTest {
     @Test void reopenAndReconfirmPreserveDeletedMembersAmountsAndCompletedTransfersInHistory() {
         var originalRequest=confirmationRequest("first");
         var first=service.confirm(room.getId(),owner.getId(),originalRequest).snapshot();
-        // Completion API is a later stage; seed its persisted audit record to exercise reopening history.
-        jdbc.update("update settlement_transfers set status='COMPLETED',updated_by_user_id=?,updated_at=TIMESTAMP '2026-11-11 12:00:00.123456' where snapshot_id=?",
-            owner.getId(),first.snapshotId());
+        service.completion(room.getId(),first.snapshotId(),first.transfers().getFirst().transferId(),owner.getId(),true);
         var historical=service.detail(room.getId(),first.snapshotId(),owner.getId());
         var open=service.reopen(room.getId(),first.snapshotId(),owner.getId());
         assertThat(open).isEqualTo(new SettlementSnapshotService.StateView(room.getId(),"OPEN",null));
@@ -242,6 +241,37 @@ class SettlementSnapshotPostgresTest {
                 exception->assertThat(exception.reason()).isEqualTo("SETTLEMENT_VERSION_CONFLICT"));
         assertThat(service.reopen(room.getId(),second.snapshotId(),owner.getId())).isEqualTo(open);
         assertThat(count("settlement_snapshots")).isEqualTo(2);
+    }
+
+    @Test void completionWaitingForReopenCannotMutateHistory() throws Exception {
+        var snapshot=service.confirm(room.getId(),owner.getId(),confirmationRequest("first")).snapshot();
+        long transfer=snapshot.transfers().getFirst().transferId();
+        var results=orderedRace(()->service.reopen(room.getId(),snapshot.snapshotId(),owner.getId()),
+            ()->service.completion(room.getId(),snapshot.snapshotId(),transfer,owner.getId(),true));
+        assertThat(results.get(1)).isEqualTo("SETTLEMENT_VERSION_CONFLICT");
+        assertThat(service.detail(room.getId(),snapshot.snapshotId(),owner.getId()).transfers()).isEqualTo(snapshot.transfers());
+    }
+
+    @Test void reopenWaitingForCompletionPreservesTheCommittedAudit() throws Exception {
+        var snapshot=service.confirm(room.getId(),owner.getId(),confirmationRequest("first")).snapshot();
+        long transfer=snapshot.transfers().getFirst().transferId();
+        var results=orderedRace(()->service.completion(room.getId(),snapshot.snapshotId(),transfer,owner.getId(),true),
+            ()->service.reopen(room.getId(),snapshot.snapshotId(),owner.getId()));
+        assertThat(results.get(0)).isInstanceOf(SettlementSnapshotService.TransferView.class);
+        var historical=service.detail(room.getId(),snapshot.snapshotId(),owner.getId());
+        assertThat(historical.transfers()).containsExactly((SettlementSnapshotService.TransferView)results.get(0));
+        var second=service.confirm(room.getId(),owner.getId(),confirmationRequest("second")).snapshot();
+        assertThat(second.transfers().getFirst().status()).isEqualTo("PENDING");
+        assertThat(second.transfers().getFirst().updatedAt()).isNull();
+    }
+
+    @Test void completionRefreshesAuditLoadedBeforeWaitingForAnIdenticalUpdate() throws Exception {
+        var snapshot=service.confirm(room.getId(),owner.getId(),confirmationRequest("first")).snapshot();
+        long transfer=snapshot.transfers().getFirst().transferId();
+        var results=orderedRace(()->service.completion(room.getId(),snapshot.snapshotId(),transfer,owner.getId(),true),
+            ()->service.completion(room.getId(),snapshot.snapshotId(),transfer,owner.getId(),true),
+            ()->assertThat(entityManager.find(SettlementTransfer.class,transfer).getStatus()).isEqualTo("PENDING"));
+        assertThat(results.get(0)).isEqualTo(results.get(1));
     }
 
     private SettlementSnapshotService.ConfirmRequest confirmationRequest(String requestId) {

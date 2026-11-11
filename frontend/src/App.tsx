@@ -951,7 +951,7 @@ function RoomWorkspace({
         <SettlementPanel view={settlementView} owner={members.some(member => member.owner && member.userId === auth.userId)}
           onRefresh={() => void refreshRoom()} onConfirm={() => {
             if (window.confirm('현재 금액으로 정산을 확정할까요? 확정 후에는 입력 수정이 잠깁니다.')) void controller.confirm();
-          }} onReopen={() => {
+          }} onCompletion={(transferId,completed) => void controller.complete(transferId,completed)} onReopen={() => {
             if (window.confirm('정산을 재개방할까요? 영수증과 멤버 정보를 다시 수정할 수 있습니다.')) void controller.reopen();
           }} />)}
 

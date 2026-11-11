@@ -21,6 +21,7 @@ export class SettlementController {
   private listeners = new Set<() => void>();
   private generation = 0;
   private alive = true;
+  private lifetime = 0;
   private abort: AbortController | null = null;
   private attempt: ConfirmRequest | null = null;
   private knownLocked = false;
@@ -31,7 +32,7 @@ export class SettlementController {
     if (!this.alive) return;
     this.view = {...this.view,...patch}; this.listeners.forEach(listener => listener());
   }
-  dispose() { this.alive = false; this.generation++; this.abort?.abort(); }
+  dispose() { this.lifetime++; this.alive = false; this.generation++; this.abort?.abort(); this.view = {...this.view,mode:'loading',busy:false,completionAttempt:null}; }
   activate() { this.alive = true; }
   async refresh(preserveAttempt = false, operation = false) {
     if (!this.alive || (this.view.busy && !operation)) return;
@@ -58,12 +59,16 @@ export class SettlementController {
       this.knownLocked = state.status === 'CONFIRMED';
       if (state.status === 'CONFIRMED') {
         const snapshot = await api.getSnapshot(this.token,this.roomId,state.currentSnapshotId!,abort.signal);
-        if (current()) { this.attempt = null; this.publish({mode:'confirmed',state,snapshot,preview:null}); }
+        if (!current()) return;
+        if (snapshot.roomId !== this.roomId || snapshot.snapshotId !== state.currentSnapshotId || snapshot.status !== 'CONFIRMED')
+          throw new Error('정산 상태를 확인하지 못했습니다. 다시 확인해주세요.');
+        this.attempt = null;
+        this.publish({mode:'confirmed',state,snapshot,preview:null,completionAttempt:this.view.completionAttempt?.snapshotId === snapshot.snapshotId ? this.view.completionAttempt : null});
       } else {
         const preview = preserveAttempt && this.attempt && this.view.preview ? this.view.preview : await api.getPreview(this.token,this.roomId,abort.signal);
         if (current()) {
           if (!preserveAttempt || !this.attempt) this.attempt = {requestId:crypto.randomUUID(),previewToken:preview.previewToken};
-          this.publish({mode:'open',state,preview,snapshot:null});
+          this.publish({mode:'open',state,preview,snapshot:null,completionAttempt:null});
         }
       }
     } catch (error) {
@@ -85,14 +90,32 @@ export class SettlementController {
     const id = this.view.state.currentSnapshotId;
     await this.mutate(() => api.reopen(this.token,this.roomId,id));
   };
-  private async mutate(action: () => Promise<unknown>) {
+  complete = async (transferId: number, completed: boolean) => {
+    if (!this.alive || this.view.busy || this.view.mode !== 'confirmed' || !this.view.snapshot ||
+        !this.view.snapshot.transfers.some(transfer => transfer.transferId === transferId)) return;
+    const snapshotId = this.view.snapshot.snapshotId;
+    const pending = this.view.completionAttempt;
+    if (pending && (pending.snapshotId !== snapshotId || pending.transferId !== transferId || pending.completed !== completed)) return;
+    this.publish({completionAttempt:{snapshotId,transferId,completed}});
+    await this.mutate(() => api.setCompletion(this.token,this.roomId,snapshotId,transferId,completed),true);
+  };
+  private async mutate(action: () => Promise<unknown>, completion = false) {
+    const lifetime = this.lifetime;
+    const current = () => this.alive && this.lifetime === lifetime;
     this.generation++; this.abort?.abort(); this.publish({busy:true,error:''});
-    try { await action(); if (this.alive) await this.refresh(false,true); }
+    try {
+      await action();
+      if (current()) {
+        if (completion) this.publish({completionAttempt:null});
+        await this.refresh(false,true);
+      }
+    }
     catch (error) {
-      if (!this.alive) return;
+      if (!current()) return;
+      if (completion && settlementConflict(error)) this.publish({completionAttempt:null});
       if (error instanceof ApiError && error.reason === 'SETTLEMENT_LOCKED') this.knownLocked = true;
       await this.refresh(!settlementConflict(error),true);
-      this.publish({error:settlementMessage(error)});
-    } finally { this.publish({busy:false}); }
+      if (current()) this.publish({error:settlementMessage(error)});
+    } finally { if (current()) this.publish({busy:false}); }
   }
 }
