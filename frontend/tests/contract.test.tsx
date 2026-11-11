@@ -1,4 +1,5 @@
 import './settlement.test';
+import './sharing.test';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { addItem, updateItem, uploadReceiptImage, startReceiptOcr, getLatestReceiptOcr, getReceiptOcr, saveReceiptOcrDraft, applyReceiptOcrDraft } from '../src/api';

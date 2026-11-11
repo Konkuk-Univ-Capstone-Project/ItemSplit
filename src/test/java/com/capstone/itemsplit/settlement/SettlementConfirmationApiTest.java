@@ -254,6 +254,63 @@ class SettlementConfirmationApiTest {
         completion(id,transfer,owner,"{\"completed\":true}").andExpect(status().isConflict());
         assertThat(data(read("/settlement-snapshots/"+id,owner)).path("transfers").get(0)).isEqualTo(completed);
     }
+    @Test void sharingIssuesHashedExpiringSecretAndMinimalAnonymousSnapshot() throws Exception {
+        long id=data(confirm(owner,"share",preview().path("previewToken").asText()).andExpect(status().isCreated())).path("snapshotId").asLong();
+        JsonNode issued=data(issue(id,owner).andExpect(status().isOk()).andExpect(header().string("Cache-Control","no-store")));
+        String token=issued.path("token").asText();
+        assertThat(token).matches("[A-Za-z0-9_-]{43}");
+        assertThat(issued.path("shareUrl").asText()).isEqualTo("/share/settlements/"+token);
+        var row=jdbc.queryForMap("select token_hash,created_at,expires_at from settlement_snapshot_share_tokens where snapshot_id=?",id);
+        assertThat(row.get("token_hash")).isEqualTo(SettlementConfirmationInput.hash(token));
+        var created=((java.sql.Timestamp)row.get("created_at")).toLocalDateTime();
+        assertThat(((java.sql.Timestamp)row.get("expires_at")).toLocalDateTime()).isEqualTo(created.plusDays(14));
+        JsonNode shared=data(shared(token).andExpect(status().isOk()).andExpect(header().string("Cache-Control","no-store"))
+            .andExpect(header().string("Referrer-Policy","no-referrer")));
+        assertThat(shared.path("snapshotId").asLong()).isEqualTo(id);
+        assertThat(shared.path("members").get(1).path("displayName").asText()).isEqualTo("guest");
+        assertThat(shared.path("transfers").get(0).path("status").asText()).isEqualTo("PENDING");
+        assertThat(shared.toString()).doesNotContain("userId","UserId","email","requestId","fingerprint","tokenHash","receipt","image","updatedAt","transferId","roomId");
+        long transfer=data(read("/settlement-snapshots/"+id,owner)).path("transfers").get(0).path("transferId").asLong();
+        completion(id,transfer,owner,"{\"completed\":true}").andExpect(status().isOk());
+        shared(token).andExpect(jsonPath("$.data.transfers[0].status").value("COMPLETED"));
+        String rotated=data(issue(id,owner).andExpect(status().isOk())).path("token").asText();
+        shared(token).andExpect(status().isNotFound());
+        shared(rotated).andExpect(status().isOk());
+        jdbc.update("update settlement_snapshot_share_tokens set created_at=?,expires_at=? where snapshot_id=?",
+            java.sql.Timestamp.valueOf(created.minusDays(20)),java.sql.Timestamp.valueOf(created.minusDays(1)),id);
+        shared(rotated).andExpect(status().isNotFound()).andExpect(header().string("Cache-Control","no-store"));
+    }
+    @Test void sharingRequiresOwnerCurrentConfirmedVersionAndReadOnlyAnonymousAccess() throws Exception {
+        long id=data(confirm(owner,"share",preview().path("previewToken").asText()).andExpect(status().isCreated())).path("snapshotId").asLong();
+        issue(id,guest).andExpect(status().isForbidden());issue(id,outsider).andExpect(status().isForbidden());
+        mvc.perform(post("/api/rooms/{room}/settlement-snapshots/{id}/share-token",room.getId(),id)).andExpect(status().isUnauthorized());
+        Room other=rooms.save(Room.create("other",owner));members.save(RoomMember.create(other,owner));
+        mvc.perform(post("/api/rooms/{room}/settlement-snapshots/{id}/share-token",other.getId(),id).header("Authorization",bearer(owner))).andExpect(status().isNotFound());
+        String token=data(issue(id,owner).andExpect(status().isOk())).path("token").asText();
+        mvc.perform(post("/api/shared/settlements/{token}",token)).andExpect(status().isUnauthorized());
+        mvc.perform(get("/api/shared/settlements")).andExpect(status().isNotFound()).andExpect(header().string("Cache-Control","no-store"));
+        mvc.perform(get("/api/shared/settlements/")).andExpect(status().isNotFound()).andExpect(header().string("Cache-Control","no-store"));
+        for(String invalid:List.of("bad","a".repeat(43),"a".repeat(44),"not-valid!")) shared(invalid).andExpect(status().isNotFound());
+        mvc.perform(post("/api/rooms/{room}/settlement-snapshots/{id}/reopen",room.getId(),id).header("Authorization",bearer(owner))).andExpect(status().isOk());
+        issue(id,owner).andExpect(status().isConflict()).andExpect(jsonPath("$.error.details[0].reason").value("SETTLEMENT_VERSION_CONFLICT"));
+        debtor.rename("new name");members.save(debtor);item.update("new input",20000,1);items.save(item);
+        long second=data(confirm(owner,"second",preview().path("previewToken").asText()).andExpect(status().isCreated())).path("snapshotId").asLong();
+        String next=data(issue(second,owner).andExpect(status().isOk())).path("token").asText();
+        JsonNode old=data(shared(token).andExpect(status().isOk()));
+        assertThat(old.path("snapshotId").asLong()).isEqualTo(id);assertThat(old.path("status").asText()).isEqualTo("REOPENED");
+        assertThat(old.path("reopenedAt").isNull()).isFalse();
+        assertThat(old.path("members").get(1).path("displayName").asText()).isEqualTo("guest");
+        assertThat(old.path("transfers").get(0).path("amount").asLong()).isEqualTo(10001);
+        shared(next).andExpect(jsonPath("$.data.snapshotId").value(second));issue(id,owner).andExpect(status().isConflict());
+        mvc.perform(post("/api/rooms/{room}/settlement-snapshots/{id}/reopen",room.getId(),second).header("Authorization",bearer(owner))).andExpect(status().isOk());
+        mvc.perform(delete("/api/rooms/{room}",room.getId()).header("Authorization",bearer(owner))).andExpect(status().isNoContent());
+        shared(token).andExpect(status().isNotFound());shared(next).andExpect(status().isNotFound());
+        assertThat(jdbc.queryForObject("select count(*) from settlement_snapshot_share_tokens where snapshot_id in (?,?)",Long.class,id,second)).isZero();
+    }
+    ResultActions issue(long id,User user) throws Exception {
+        return mvc.perform(post("/api/rooms/{room}/settlement-snapshots/{id}/share-token",room.getId(),id).header("Authorization",bearer(user)));
+    }
+    ResultActions shared(String token) throws Exception {return mvc.perform(get("/api/shared/settlements/{token}",token));}
     ResultActions completion(long snapshot,long transfer,User user,String body) throws Exception {
         return mvc.perform(put("/api/rooms/{room}/settlement-snapshots/{snapshot}/transfers/{transfer}/completion",room.getId(),snapshot,transfer)
             .header("Authorization",bearer(user)).contentType(MediaType.APPLICATION_JSON).content(body));

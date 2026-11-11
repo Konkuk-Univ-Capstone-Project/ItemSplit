@@ -1,3 +1,6 @@
+import { SharedSettlementPage } from './features/sharedSettlement/SharedSettlementPage';
+import { isSharedPath } from './features/sharedSettlement/controller';
+import { SnapshotShare } from './features/settlement/SnapshotShare';
 import { SettlementController, editingBlocked, settlementConflict, settlementMessage } from './features/settlement/controller';
 import { SettlementPanel } from './features/settlement/SettlementPanel';
 import { RoomEditingContext, useRoomEditing } from './features/settlement/RoomEditingContext';
@@ -164,6 +167,11 @@ function calculateSettlementTransfers(members: Settlement['members']): Settlemen
 }
 
 function App() {
+  const path = window.location.pathname;
+  return isSharedPath(path) ? <SharedSettlementPage path={path}/> : <PrivateApp/>;
+}
+
+function PrivateApp() {
   const [auth, setAuth] = useState<AuthSession | null>(() => readJson<AuthSession | null>(AUTH_KEY, null));
   const [recentRooms, setRecentRooms] = useState<RecentRoom[]>(() => readJson<RecentRoom[]>(ROOMS_KEY, []));
   const [activeRoomId, setActiveRoomId] = useState<number | null>(() => {
@@ -948,12 +956,16 @@ function RoomWorkspace({
       )}
 
       {activeTab === 'settlement' && (settlementView.mode === 'legacy' ? <SettlementBoard settlement={settlement} /> :
-        <SettlementPanel view={settlementView} owner={members.some(member => member.owner && member.userId === auth.userId)}
+        <><SettlementPanel view={settlementView} owner={members.some(member => member.owner && member.userId === auth.userId)}
           onRefresh={() => void refreshRoom()} onConfirm={() => {
             if (window.confirm('현재 금액으로 정산을 확정할까요? 확정 후에는 입력 수정이 잠깁니다.')) void controller.confirm();
           }} onCompletion={(transferId,completed) => void controller.complete(transferId,completed)} onReopen={() => {
             if (window.confirm('정산을 재개방할까요? 영수증과 멤버 정보를 다시 수정할 수 있습니다.')) void controller.reopen();
-          }} />)}
+          }} />
+          {settlementView.mode === 'confirmed' && settlementView.snapshot && members.some(member => member.owner && member.userId === auth.userId) &&
+            <SnapshotShare key={`${token}:${room.roomId}:${settlementView.snapshot.snapshotId}`} token={token} roomId={room.roomId} snapshotId={settlementView.snapshot.snapshotId}
+              disabled={settlementView.busy} onConflict={()=>void refreshRoom()}/>}
+        </>)}
 
       {activeTab === 'share' && (
         <SharePanel

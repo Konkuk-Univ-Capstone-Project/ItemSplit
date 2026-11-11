@@ -28,6 +28,8 @@ import static org.awaitility.Awaitility.await;
 class SettlementSnapshotPostgresTest {
     @Container @ServiceConnection static final PostgreSQLContainer<?> postgres=new PostgreSQLContainer<>("postgres:16-alpine");
     @Autowired SettlementSnapshotService service;
+    @Autowired SettlementSharingService sharing;
+    @Autowired SettlementSnapshotShareTokenRepository shares;
     @Autowired jakarta.persistence.EntityManager entityManager;
     @Autowired UserRepository users;
     @Autowired RoomRepository rooms;
@@ -272,6 +274,48 @@ class SettlementSnapshotPostgresTest {
             ()->service.completion(room.getId(),snapshot.snapshotId(),transfer,owner.getId(),true),
             ()->assertThat(entityManager.find(SettlementTransfer.class,transfer).getStatus()).isEqualTo("PENDING"));
         assertThat(results.get(0)).isEqualTo(results.get(1));
+    }
+
+    @Test void successiveIssuersSerializeAndOnlyLastTokenSurvives() throws Exception {
+        var snapshot=service.confirm(room.getId(),owner.getId(),confirmationRequest("sharing")).snapshot();
+        var original=sharing.issue(room.getId(),snapshot.snapshotId(),owner.getId());
+        var results=orderedRace(()->sharing.issue(room.getId(),snapshot.snapshotId(),owner.getId()),
+            ()->sharing.issue(room.getId(),snapshot.snapshotId(),owner.getId()),
+            ()->shares.findByTokenHash(SettlementConfirmationInput.hash(original.token())).orElseThrow());
+        var first=(SettlementSharingService.IssuedShare)results.get(0);
+        var last=(SettlementSharingService.IssuedShare)results.get(1);
+        assertThat(first.token()).isNotEqualTo(last.token());
+        assertThatThrownBy(()->sharing.read(original.token())).isInstanceOfSatisfying(ApiException.class,e->assertThat(e.getErrorCode()).isEqualTo(ErrorCode.NOT_FOUND));
+        assertThatThrownBy(()->sharing.read(first.token())).isInstanceOfSatisfying(ApiException.class,e->assertThat(e.getErrorCode()).isEqualTo(ErrorCode.NOT_FOUND));
+        assertThat(sharing.read(last.token()).snapshotId()).isEqualTo(snapshot.snapshotId());
+        assertThat(jdbc.queryForObject("select count(*) from settlement_snapshot_share_tokens where snapshot_id=?",Long.class,snapshot.snapshotId())).isEqualTo(1);
+    }
+    @Test void oldTokenReadWaitingBehindRotationCannotReturnCachedSecretOrSnapshot() throws Exception {
+        var snapshot=service.confirm(room.getId(),owner.getId(),confirmationRequest("sharing")).snapshot();
+        var original=sharing.issue(room.getId(),snapshot.snapshotId(),owner.getId());
+        var results=orderedRace(()->sharing.issue(room.getId(),snapshot.snapshotId(),owner.getId()),
+            ()->sharing.read(original.token()),
+            ()->shares.findByTokenHash(SettlementConfirmationInput.hash(original.token())).orElseThrow());
+        assertThat(results.get(1)).isInstanceOfSatisfying(ApiException.class,e->assertThat(e.getErrorCode()).isEqualTo(ErrorCode.NOT_FOUND));
+        var current=(SettlementSharingService.IssuedShare)results.get(0);
+        assertThat(sharing.read(current.token()).snapshotId()).isEqualTo(snapshot.snapshotId());
+    }
+    @Test void publicReadWaitingForCompletionRefreshesPreloadedTransferStatus() throws Exception {
+        var snapshot=service.confirm(room.getId(),owner.getId(),confirmationRequest("sharing")).snapshot();
+        var issued=sharing.issue(room.getId(),snapshot.snapshotId(),owner.getId());
+        long transfer=snapshot.transfers().getFirst().transferId();
+        var results=orderedRace(()->service.completion(room.getId(),snapshot.snapshotId(),transfer,owner.getId(),true),
+            ()->sharing.read(issued.token()),
+            ()->assertThat(entityManager.find(SettlementTransfer.class,transfer).getStatus()).isEqualTo("PENDING"));
+        assertThat(((SettlementSharingService.PublicSnapshot)results.get(1)).transfers().getFirst().status()).isEqualTo("COMPLETED");
+    }
+    @Test void shareIssuanceWaitingForReopenCannotMintHistoricalToken() throws Exception {
+        var snapshot=service.confirm(room.getId(),owner.getId(),confirmationRequest("sharing")).snapshot();
+        var results=orderedRace(()->service.reopen(room.getId(),snapshot.snapshotId(),owner.getId()),
+            ()->sharing.issue(room.getId(),snapshot.snapshotId(),owner.getId()),
+            ()->entityManager.find(SettlementSnapshot.class,snapshot.snapshotId()));
+        assertThat(results.get(1)).isEqualTo("SETTLEMENT_VERSION_CONFLICT");
+        assertThat(shares.findBySnapshotId(snapshot.snapshotId())).isEmpty();
     }
 
     private SettlementSnapshotService.ConfirmRequest confirmationRequest(String requestId) {

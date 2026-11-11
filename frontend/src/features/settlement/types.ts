@@ -14,3 +14,6 @@ export type SettlementView = {
   preview: Preview | null; snapshot: Snapshot | null; busy: boolean; error: string;
   completionAttempt?: {snapshotId: number; transferId: number; completed: boolean} | null;
 };
+
+export type IssuedSnapshotShare = {token: string; expiresAt: string; shareUrl: string};
+export type SnapshotShareState = {busy: boolean; share: IssuedSnapshotShare | null; error: string; copied: boolean};

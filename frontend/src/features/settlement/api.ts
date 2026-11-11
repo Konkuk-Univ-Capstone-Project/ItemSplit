@@ -8,3 +8,5 @@ export const confirm = (token: string, roomId: number, body: ConfirmRequest, sig
 export const reopen = (token: string, roomId: number, snapshotId: number, signal?: AbortSignal) => request<SettlementState>(`${root(roomId)}/settlement-snapshots/${snapshotId}/reopen`, {token,method:'POST',signal});
 
 export const setCompletion = (token: string, roomId: number, snapshotId: number, transferId: number, completed: boolean) => request<Snapshot['transfers'][number]>(`${root(roomId)}/settlement-snapshots/${snapshotId}/transfers/${transferId}/completion`, {token,method:'PUT',body:JSON.stringify({completed})});
+
+export const issueSnapshotShare = (token: string, roomId: number, snapshotId: number, signal?: AbortSignal) => request<import('./types').IssuedSnapshotShare>(`${root(roomId)}/settlement-snapshots/${snapshotId}/share-token`, {token,method:'POST',signal,cache:'no-store',referrerPolicy:'no-referrer'});
