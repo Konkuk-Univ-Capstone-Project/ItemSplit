@@ -1,0 +1,95 @@
+@startuml ItemSplitOcrReceiptSequence
+title UC-01 영수증 이미지 등록 및 OCR 반영
+hide footbox
+autonumber
+skinparam shadowing false
+skinparam defaultFontName SansSerif
+skinparam sequenceMessageAlign center
+skinparam sequence {
+  ArrowColor #334155
+  ParticipantBackgroundColor #EFF6FF
+  ParticipantBorderColor #64748B
+  LifeLineBorderColor #94A3B8
+}
+
+actor "영수증 작성자" as User
+participant "React 화면" as UI
+participant "API·서비스\nReceiptImage / Ocr / OcrDraft" as API
+participant "OcrWorker\n비동기 작업" as Worker
+database "PostgreSQL" as DB
+participant "이미지 저장소\nAmazon S3" as Storage
+participant "CLOVA OCR" as OCR
+
+note over User,API
+  전제: 로그인한 방 멤버, 정산 확정 전이거나 재개방되어 입력을 수정할 수 있는 방, OCR API 활성화.
+  배포 환경: STORAGE_TYPE=s3 (Amazon S3 사용).
+  HTTP 요청은 JWT 인증을 거친다. 컨트롤러와 서비스 호출은 묶어서 표현한다.
+end note
+
+== 이미지 영수증 등록 ==
+User -> UI : 영수증 이미지 선택·업로드
+UI -> API : POST /api/rooms/{roomId}/receipts/image
+API -> DB : 방 잠금·멤버 권한·편집 가능 상태 확인
+API -> API : 이미지 형식·크기 검증
+API -> Storage : 이미지 저장
+Storage --> API : 저장 키·파일 정보
+API -> DB : 영수증·이미지 정보 저장 후 커밋
+API --> UI : 201 영수증 ID·이미지 정보
+
+== OCR 요청과 비동기 처리 ==
+User -> UI : 인식 시작
+UI -> API : POST .../receipts/{receiptId}/ocr/jobs\n{requestId}
+API -> DB : 방 잠금·작성자 권한·편집 가능 상태 확인
+API -> DB : 기존 요청 확인·사용량 예약\n인식 대기 상태의 작업·사진별 작업·검토용 초안 생성
+API ->> Worker : 작업 정보 저장 완료 후 인식 요청 이벤트 전달\n백그라운드 처리 예약
+API --> UI : 202 작업 ID·현재 상태
+note over UI,Worker
+  응답과 작업 실행은 비동기다. 같은 requestId의 재요청은 기존 작업을 반환한다.
+  잠금·권한·입력·한도 검사 실패 시 작업 생성과 외부 호출을 진행하지 않는다.
+end note
+
+par 백그라운드 인식 작업
+loop 처리할 사진마다
+  Worker -> DB : 방 잠금 후 중복 실행을 막기 위해 작업 선점\n인식 진행 중으로 표시
+  Worker -> Storage : 이미지 읽기
+  Storage --> Worker : 이미지 파일 데이터
+  Worker -> DB : 호출 직전 상태 재검증·호출 기록 커밋
+  Worker -> OCR : 영수증 이미지의 문자·품목·금액 인식 요청
+  note right of Worker : 외부 호출 중 DB 잠금을 유지하지 않는다.
+  alt 인식 성공
+    OCR --> Worker : 추출 품목·금액 후보
+    Worker -> DB : 방 잠금 후 현재 처리 중인 시도의 유효성 확인\n입력 수정 가능 여부 재확인\n초안 후보 저장·사진/전체 작업 상태 갱신
+  else 인식 실패
+    OCR --> Worker : 오류
+    Worker -> DB : 사진 실패 사유·재시도 가능 여부 저장\n전체 작업 상태 갱신
+  end
+end
+
+else 화면의 상태 조회
+loop 처리 중 주기적으로 조회
+  UI -> API : GET .../ocr/jobs/{jobId}
+  API -> DB : 멤버 권한 확인·작업/초안 조회
+  API --> UI : 진행 상태·초안·검토 필요 항목
+end
+end
+
+== 사용자 검토와 실제 품목 반영 ==
+User -> UI : 품목·금액·참여자 수정, 실패 사진 수동 보완
+UI -> API : PUT .../ocr/jobs/{jobId}/draft\n{revision, items, coveredImageIds}
+API -> DB : 방 잠금·작성자·편집 가능 상태 확인\n초안 버전 일치 여부 확인\n초안 저장 후 버전 갱신
+API --> UI : 저장된 초안·새 초안 버전
+User -> UI : 검토 확인 후 반영
+UI -> API : POST .../ocr/jobs/{jobId}/draft/apply\n{revision, reviewConfirmed: true}
+API -> DB : 방 잠금·권한·편집 가능 상태 확인\n초안 버전 일치 여부 확인
+alt 미입력·미보완 사진 등 반영 차단 항목이 있음
+  API --> UI : 오류 안내 → 초안 수정·재검토
+else 반영 가능
+  API -> DB : 실제 품목·참여자 배정 저장\n초안을 실제 품목에 반영 완료한 상태로 변경·저장 확정
+  API --> UI : 200 갱신된 영수증 상세
+  UI --> User : 반영된 품목 표시
+end
+note over API,DB
+  OCR 결과는 곧바로 실제 품목이 되지 않는다.
+  이미 반영한 초안 버전으로 다시 반영을 요청하면 기존 결과를 반환해 중복 반영을 막는다.
+end note
+@enduml

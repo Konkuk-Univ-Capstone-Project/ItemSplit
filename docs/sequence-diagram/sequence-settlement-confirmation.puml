@@ -1,0 +1,106 @@
+@startuml ItemSplitSettlementConfirmationSequence
+title UC-03 정산 확정 및 재개방·재확정
+hide footbox
+autonumber
+skinparam shadowing false
+skinparam defaultFontName SansSerif
+skinparam sequenceMessageAlign center
+skinparam sequence {
+  ArrowColor #334155
+  ParticipantBackgroundColor #EFF6FF
+  ParticipantBorderColor #64748B
+  LifeLineBorderColor #94A3B8
+}
+
+actor "방장" as Owner
+participant "React 정산 화면" as UI
+participant "정산 확정 API·서비스\nSettlementSnapshotController / SettlementSnapshotService" as Snapshot
+participant "정산 계산·입력 검증\nSettlementService / ConfirmationInput" as Calculation
+database "PostgreSQL" as DB
+
+note over Owner,DB
+  전제: 로그인, 정산 확정 API 활성화, V3·V4 적용 완료.
+  방 멤버도 미리보기를 조회할 수 있으나 확정·재개방은 방장만 가능하다.
+  아래 API 경로의 접두어는 /api/rooms/{roomId}이다.
+end note
+
+== 확정 미리보기 ==
+Owner -> UI : 정산 화면 열기
+UI -> Snapshot : GET .../settlements/confirmation-preview
+Snapshot -> DB : 방 잠금·멤버 권한·정산 상태 확인
+Snapshot -> Calculation : 현재 입력 지문 생성·정산 계산·OCR 상태 검사
+Calculation -> DB : 멤버·영수증·품목·배정·OCR 상태 조회
+Calculation --> Snapshot : 개인별 금액·입력 지문·차단 항목
+Snapshot -> Snapshot : 서버 송금 경로 계산\n입력·정산 세대를 반영한 previewToken 생성
+Snapshot --> UI : 200 {ready, issues, members, transfers, previewToken}
+UI --> Owner : 미리보기 또는 입력/OCR 보완 안내
+
+== 정산 확정 ==
+Owner -> UI : 확정 선택 (ready=true)
+UI -> Snapshot : POST .../settlement-snapshots\n{requestId, previewToken}
+Snapshot -> DB : 방 잠금·방장 권한 확인\n동일 requestId의 기존 확정본 조회
+alt 동일 requestId·동일 요청이 이미 처리됨
+  Snapshot --> UI : 200 기존 확정본 (새 버전 생성 없음)
+else requestId를 다른 요청에 재사용 / 이미 다른 확정본이 활성화됨
+  Snapshot --> UI : 409 요청 식별자·버전 충돌
+else 신규 확정 요청
+  Snapshot -> Calculation : 잠금 안에서 입력·OCR 상태·금액 재검증
+  Calculation -> DB : 최신 입력·상태 조회
+  Calculation --> Snapshot : 재계산 결과·입력 지문·차단 항목
+  alt previewToken 불일치
+    Snapshot --> UI : 409 SETTLEMENT_INPUT_CHANGED
+    UI --> Owner : 최신 미리보기로 재확인 요청
+  else 미입력·진행 중/미반영 OCR 등 차단 항목 존재
+    Snapshot --> UI : 400 SETTLEMENT_NOT_READY
+  else 확정 가능
+    Snapshot -> DB : 다음 버전 확정본 저장\n당시 이름·개인별 금액·서버 송금 경로(송금 미완료)
+    Snapshot -> DB : 방의 정산을 확정하고 입력 수정 제한 설정\n현재 확정본 지정\n동일 트랜잭션 커밋
+    Snapshot --> UI : 201 저장된 확정본
+    UI --> Owner : 확정 결과 표시·입력 편집 비활성화
+  end
+end
+note over Snapshot,DB
+  입력 변경도 같은 방 잠금을 얻고 RoomEditGuard를 호출한다.
+  정산이 확정된 동안에는 서버가 영수증·품목·참여자 변경을 차단한다.
+  변경 요청에는 409 SETTLEMENT_LOCKED를 반환한다.
+  API 활성화 설정을 꺼도 이미 확정된 방은 보호한다.
+end note
+
+newpage UC-03 정산 확정 및 재개방·재확정 — 재개방 및 새 버전 재확정
+== 재개방 ==
+Owner -> UI : 현재 확정본 재개방 선택
+UI -> Snapshot : POST .../settlement-snapshots/{snapshotId}/reopen
+Snapshot -> DB : 방 잠금·방장 권한 확인\n방 상태·요청 확정본·최신 버전 조회
+alt 이미 재개방되었으며, 요청한 확정본이 가장 최근에 재개방한 확정본인 경우
+  Snapshot --> UI : 200 재개방된 상태 반환\n중복 요청이므로 추가 변경 없음
+else 요청한 확정본이 현재 적용 중인 확정본이 아닌 경우
+  Snapshot --> UI : 409 SETTLEMENT_VERSION_CONFLICT
+else 요청한 확정본이 현재 적용 중인 확정본인 경우
+  Snapshot -> DB : 기존 확정본을 과거 기록으로 전환\n재개방한 계정·시각 기록
+  Snapshot -> DB : 입력 수정을 다시 허용하고 현재 확정본 지정 해제\n동일 트랜잭션 커밋
+  Snapshot --> UI : 200 재개방 완료 응답\n입력 수정 가능·현재 확정본 없음
+  UI --> Owner : 편집 다시 허용
+end
+
+== 입력 수정 후 재확정 ==
+ref over Owner,DB : UC-02: 재개방된 방의 결제자·품목·참여자 수정 및 저장
+Owner -> UI : 수정한 입력으로 미리보기 확인
+UI -> Snapshot : GET .../settlements/confirmation-preview
+Snapshot -> DB : 방 잠금·권한·상태 확인
+Snapshot -> Calculation : 변경된 입력 재계산·OCR 상태 검증
+Calculation -> DB : 최신 입력 조회
+Calculation --> Snapshot : 금액·지문·차단 항목
+Snapshot --> UI : 새 previewToken·서버 송금 경로·ready
+Owner -> UI : 새 정산 확정
+UI -> Snapshot : POST .../settlement-snapshots\n{새 requestId, 새 previewToken}
+ref over Snapshot,DB : 앞 페이지와 동일한 잠금·권한·멱등성·입력 검증
+Snapshot -> DB : version + 1인 새 확정본 생성\n새 확정본의 송금 내역은 모두 송금 미완료로 시작
+Snapshot -> DB : 수정된 정산을 확정하고 입력 수정 제한 설정\n새 확정본을 현재 정산 기준으로 지정\n동일 트랜잭션 커밋
+Snapshot --> UI : 201 새 버전 확정본
+UI --> Owner : 새 확정 결과·편집 제한 표시
+note over Snapshot,DB
+  과거 확정본의 이름·금액·송금 완료 기록은 덮어쓰지 않는다.
+  기존 공유 링크도 원래 버전의 기록을 가리킨다.
+  과거 확정 requestId의 재전송은 원래 확정본을 반환한다.
+end note
+@enduml
