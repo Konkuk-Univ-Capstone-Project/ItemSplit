@@ -19,6 +19,12 @@ spring:
     # The consolidated V1 must run on an empty DB; never silently baseline an old schema.
     baseline-on-migrate: false
 
+server:
+  # Trust X-Forwarded-For/-Proto only from internal proxies (nginx, a load balancer in a private network).
+  # Tomcat then uses the right-most address not added by those proxies as the client address.
+  # Requests that reach the app directly keep their real connection address; their headers are ignored.
+  forward-headers-strategy: native
+
 management:
   endpoints:
     web:
