@@ -13,7 +13,8 @@ import java.time.Clock;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
-import lombok.RequiredArgsConstructor;
+import java.util.concurrent.atomic.AtomicLong;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
 import org.springframework.http.MediaType;
@@ -22,13 +23,25 @@ import org.springframework.web.filter.OncePerRequestFilter;
 
 @Component
 @Order(Ordered.HIGHEST_PRECEDENCE + 10)
-@RequiredArgsConstructor
 public class RateLimitFilter extends OncePerRequestFilter {
 
 	private final RateLimitProperties properties;
 	private final ObjectMapper objectMapper;
-	private final Clock clock = Clock.systemUTC();
+	private final Clock clock;
 	private final ConcurrentMap<String, Bucket> buckets = new ConcurrentHashMap<>();
+	private final AtomicLong lastSweepAt;
+
+	@Autowired
+	public RateLimitFilter(RateLimitProperties properties, ObjectMapper objectMapper) {
+		this(properties, objectMapper, Clock.systemUTC());
+	}
+
+	RateLimitFilter(RateLimitProperties properties, ObjectMapper objectMapper, Clock clock) {
+		this.properties = properties;
+		this.objectMapper = objectMapper;
+		this.clock = clock;
+		this.lastSweepAt = new AtomicLong(clock.instant().getEpochSecond());
+	}
 
 	@Override
 	protected boolean shouldNotFilter(HttpServletRequest request) {
@@ -41,7 +54,10 @@ public class RateLimitFilter extends OncePerRequestFilter {
 		HttpServletResponse response,
 		FilterChain filterChain
 	) throws ServletException, IOException {
-		LimitDecision decision = tryConsume(resolveClientKey(request));
+		// The client address is never read from X-Forwarded-For here. Tomcat's RemoteIpValve
+		// (server.forward-headers-strategy=native) applies that header only when the request comes from
+		// an internal proxy, taking the right-most address the proxy chain did not add itself.
+		LimitDecision decision = tryConsume(request.getRemoteAddr());
 		response.setHeader("X-RateLimit-Limit", String.valueOf(properties.getCapacity()));
 		response.setHeader("X-RateLimit-Remaining", String.valueOf(decision.remaining()));
 
@@ -61,32 +77,50 @@ public class RateLimitFilter extends OncePerRequestFilter {
 		objectMapper.writeValue(response.getWriter(), ApiResponse.failure(error));
 	}
 
+	int trackedClients() {
+		return buckets.size();
+	}
+
 	private LimitDecision tryConsume(String key) {
 		long now = clock.instant().getEpochSecond();
-		Bucket bucket = buckets.computeIfAbsent(key, ignored -> new Bucket(now));
+		sweepIdleBuckets(now);
 
-		synchronized (bucket) {
-			long elapsed = now - bucket.windowStartedAt();
-			if (elapsed >= properties.getWindowSeconds()) {
-				bucket.reset(now);
+		while (true) {
+			Bucket bucket = buckets.computeIfAbsent(key, ignored -> new Bucket(now));
+			synchronized (bucket) {
+				if (bucket.removed) {
+					continue;
+				}
+				long elapsed = now - bucket.windowStartedAt;
+				if (elapsed >= properties.getWindowSeconds()) {
+					bucket.reset(now);
+				}
+
+				if (bucket.count < properties.getCapacity()) {
+					bucket.count++;
+					return new LimitDecision(true, properties.getCapacity() - bucket.count, 0);
+				}
+
+				long retryAfterSeconds = Math.max(1, properties.getWindowSeconds() - (now - bucket.windowStartedAt));
+				return new LimitDecision(false, 0, retryAfterSeconds);
 			}
-
-			if (bucket.count() < properties.getCapacity()) {
-				bucket.consume();
-				return new LimitDecision(true, properties.getCapacity() - bucket.count(), 0);
-			}
-
-			long retryAfterSeconds = Math.max(1, properties.getWindowSeconds() - (now - bucket.windowStartedAt()));
-			return new LimitDecision(false, 0, retryAfterSeconds);
 		}
 	}
 
-	private String resolveClientKey(HttpServletRequest request) {
-		String forwardedFor = request.getHeader("X-Forwarded-For");
-		if (forwardedFor != null && !forwardedFor.isBlank()) {
-			return forwardedFor.split(",")[0].trim();
+	// At most once per window, drop clients whose window has already ended so the map holds only recent clients.
+	private void sweepIdleBuckets(long now) {
+		long last = lastSweepAt.get();
+		if (now - last < properties.getWindowSeconds() || !lastSweepAt.compareAndSet(last, now)) {
+			return;
 		}
-		return request.getRemoteAddr();
+		buckets.forEach((key, bucket) -> {
+			synchronized (bucket) {
+				if (now - bucket.windowStartedAt >= properties.getWindowSeconds()) {
+					bucket.removed = true;
+					buckets.remove(key, bucket);
+				}
+			}
+		});
 	}
 
 	private record LimitDecision(boolean allowed, int remaining, long retryAfterSeconds) {
@@ -96,21 +130,11 @@ public class RateLimitFilter extends OncePerRequestFilter {
 
 		private long windowStartedAt;
 		private int count;
+		// Set under the bucket's lock when the sweep drops it; a request holding a stale reference retries.
+		private boolean removed;
 
 		private Bucket(long windowStartedAt) {
 			this.windowStartedAt = windowStartedAt;
-		}
-
-		private long windowStartedAt() {
-			return windowStartedAt;
-		}
-
-		private int count() {
-			return count;
-		}
-
-		private void consume() {
-			count++;
 		}
 
 		private void reset(long windowStartedAt) {

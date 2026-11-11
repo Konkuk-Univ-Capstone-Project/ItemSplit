@@ -11,7 +11,7 @@ import static org.assertj.core.api.Assertions.*;
 class OcrMigrationTest {
     @Container static final PostgreSQLContainer<?> postgres=new PostgreSQLContainer<>("postgres:16-alpine");
     @Test void baselineCreatesOcrRelationshipsAndCleansChildrenOnDeletion() throws Exception {
-        var flyway=Flyway.configure().dataSource(postgres.getJdbcUrl(),postgres.getUsername(),postgres.getPassword()).load();
+        var flyway=Flyway.configure().dataSource(postgres.getJdbcUrl(),postgres.getUsername(),postgres.getPassword()).target("2").load();
         var baseline=Flyway.configure().dataSource(postgres.getJdbcUrl(),postgres.getUsername(),postgres.getPassword())
             .target("1").load();
         assertThat(baseline.migrate().migrationsExecuted).isEqualTo(1);

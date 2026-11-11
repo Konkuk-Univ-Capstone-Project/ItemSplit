@@ -392,6 +392,7 @@ test('retry control exposes remaining attempts and cannot retry exhausted photos
 
 import './ocrPolling.test';
 import './httpClient.test';
+import './rooms.test';
 
 test('calculated price follows edited quantity and rejects rounding, invalid amounts and already entered prices', async () => {
   const { calculatedUnitPrice } = await import('../src/ocrReview');

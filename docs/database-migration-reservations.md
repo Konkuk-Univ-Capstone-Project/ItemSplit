@@ -10,7 +10,7 @@
 |---|---|---|---|---|
 | V1 | 기존 | `V1__baseline.sql` | 통합 기준선 | 존재, 수정 금지 |
 | V2 | 기존 | `V2__ocr_daily_usage.sql` | OCR 일일 사용량 | 존재, 수정 금지 |
-| V3 | 개발자 2 | `V3__assignment_member_required.sql` | `assignments.room_member_id` 필수 관계 | 예약, 아직 파일 없음 |
+| V3 | 개발자 2 | `V3__assignment_member_required.sql` | `assignments.room_member_id` 필수 관계 | 존재, 적용 후 수정 금지 |
 | V4 | 개발자 1 | `V4__settlement_snapshots.sql` | 정산 상태·확정본·송금 상태·확정본 공유 | 예약, 아직 파일 없음 |
 | V5 이상 | 미배정 | 새 작업 전에 이 표에 등록 | 적용된 버전의 후속 변경 | 미예약 |
 
@@ -23,6 +23,22 @@
 - 점검·복구 후 `room_member_id NOT NULL`을 적용한다. 기존 외래 키·품목/멤버 고유 제약을 유지하고 JPA 매핑도 맞춘다.
 - 참여자 미지정 초안은 배정 행이 0개인 상태로 허용한다. NULL 멤버를 가진 배정 행과 혼동하지 않는다.
 - 깨끗한 DB 적용 성공, NULL 기존 행의 적용 차단, 복구 후 적용 성공, 미배정 초안 저장, 멤버 삭제 시 배정 정리를 PostgreSQL에서 확인한다.
+
+### V3 적용이 멈췄을 때
+
+V3는 먼저 두 가지를 센다. 멤버가 없는 배정 행과, 품목의 방과 다른 방의 멤버를 가리키는 배정 행이다. 하나라도 있으면 `V3 stopped: ...` 오류로 중단한다. PostgreSQL은 마이그레이션을 한 트랜잭션으로 실행하므로 DB는 V2 상태 그대로 남고, 실패 기록도 남지 않는다. 존재하지 않는 멤버는 기존 외래 키가 이미 막고 있어서 따로 세지 않는다.
+
+1. 대상 행을 확인한다.
+   ```sql
+   SELECT a.id, a.item_id, a.room_member_id, r.room_id AS item_room_id, m.room_id AS member_room_id
+   FROM assignments a
+   JOIN items i ON i.id = a.item_id
+   JOIN receipts r ON r.id = i.receipt_id
+   LEFT JOIN room_members m ON m.id = a.room_member_id
+   WHERE a.room_member_id IS NULL OR m.room_id <> r.room_id;
+   ```
+2. 품목을 실제로 부담할 멤버를 알면 `room_member_id`를 그 방의 멤버로 고친다. 알 수 없으면 그 배정 행을 지운다. 배정 행을 지운 품목은 참여자 미지정 상태가 되어 정산에서 빠지므로, 방 멤버가 다시 참여자를 지정해야 한다.
+3. 앱을 다시 시작하거나 `flyway migrate`를 다시 실행한다.
 
 ## V4 — 개발자 1
 
