@@ -169,6 +169,9 @@ function App() {
   const [selection, setSelection] = useState<{ userId: number; roomId: number | null } | null>(null);
   const userId = auth?.userId ?? null;
   const activeRoomId = selection && selection.userId === userId ? selection.roomId : null;
+  // Callbacks from a request started before logout still carry the old account's userId; they are ignored.
+  const currentUserId = useRef(userId);
+  currentUserId.current = userId;
   const [activeTab, setActiveTab] = useState<MainTab>('receipts');
   const [notice, setNotice] = useState<Notice>(null);
   const [roomRefreshVersion, setRoomRefreshVersion] = useState(0);
@@ -206,7 +209,8 @@ function App() {
   );
 
   function setActiveRoomId(roomId: number | null) {
-    if (userId !== null) setSelection({ userId, roomId });
+    if (userId === null || userId !== currentUserId.current) return;
+    setSelection({ userId, roomId });
   }
 
   function saveRoom(room: RecentRoom) {
@@ -515,18 +519,31 @@ function RoomRail({
   const [joinNickname, setJoinNickname] = useState('');
   const [submitting, setSubmitting] = useState<'create' | 'join' | 'options' | null>(null);
   const [deletingRoomId, setDeletingRoomId] = useState<number | null>(null);
+  // Requests started before logout must not report into the next account's screen.
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+
+  function showNotice(next: Notice) {
+    if (mounted.current) setNotice(next);
+  }
 
   async function handleCreate(event: FormEvent) {
     event.preventDefault();
     setSubmitting('create');
-    setNotice(null);
+    showNotice(null);
     try {
       const room = await createRoom(token, roomName);
+      if (!mounted.current) return;
       saveRoom({ roomId: room.roomId, roomName: room.roomName, owner: true });
       setRoomName('');
-      setNotice({ kind: 'success', text: `${room.roomName} 방을 만들었습니다.` });
+      showNotice({ kind: 'success', text: `${room.roomName} 방을 만들었습니다.` });
     } catch (error) {
-      setNotice({ kind: 'error', text: error instanceof Error ? error.message : '방 생성에 실패했습니다.' });
+      showNotice({ kind: 'error', text: error instanceof Error ? error.message : '방 생성에 실패했습니다.' });
     } finally {
       setSubmitting(null);
     }
@@ -535,9 +552,10 @@ function RoomRail({
   async function handleOpenJoinDialog(event: FormEvent) {
     event.preventDefault();
     setSubmitting('options');
-    setNotice(null);
+    showNotice(null);
     try {
       const result = await getJoinOptions(token, inviteToken.trim());
+      if (!mounted.current) return;
       setJoinOptions(result);
       const firstUnlinked = result.members.find((member) => !member.linked);
       setSelectedJoinMemberId(firstUnlinked ? String(firstUnlinked.memberId) : '');
@@ -546,7 +564,7 @@ function RoomRail({
     } catch (error) {
       setJoinOptions(null);
       setJoinDialogOpen(false);
-      setNotice({ kind: 'error', text: error instanceof Error ? error.message : '참가 옵션을 불러오지 못했습니다.' });
+      showNotice({ kind: 'error', text: error instanceof Error ? error.message : '참가 옵션을 불러오지 못했습니다.' });
     } finally {
       setSubmitting(null);
     }
@@ -558,7 +576,7 @@ function RoomRail({
     }
 
     setSubmitting('join');
-    setNotice(null);
+    showNotice(null);
     try {
       const room = await joinRoomWithOptions(
         token,
@@ -566,15 +584,16 @@ function RoomRail({
         selectedJoinMemberId ? Number(selectedJoinMemberId) : null,
         joinNickname || null
       );
+      if (!mounted.current) return;
       saveRoom({ roomId: room.roomId, roomName: room.roomName, owner: false });
       setInviteToken('');
       setJoinOptions(null);
       setJoinDialogOpen(false);
       setSelectedJoinMemberId('');
       setJoinNickname('');
-      setNotice({ kind: 'success', text: `${room.roomName} 방에 연결되었습니다.` });
+      showNotice({ kind: 'success', text: `${room.roomName} 방에 연결되었습니다.` });
     } catch (error) {
-      setNotice({ kind: 'error', text: error instanceof Error ? error.message : '방 참가에 실패했습니다.' });
+      showNotice({ kind: 'error', text: error instanceof Error ? error.message : '방 참가에 실패했습니다.' });
     } finally {
       setSubmitting(null);
     }
@@ -586,13 +605,14 @@ function RoomRail({
     }
 
     setDeletingRoomId(room.roomId);
-    setNotice(null);
+    showNotice(null);
     try {
       await deleteRoom(token, room.roomId);
+      if (!mounted.current) return;
       removeRoom(room.roomId);
-      setNotice({ kind: 'success', text: `${room.roomName} 방을 삭제했습니다.` });
+      showNotice({ kind: 'success', text: `${room.roomName} 방을 삭제했습니다.` });
     } catch (error) {
-      setNotice({ kind: 'error', text: error instanceof Error ? error.message : '방 삭제에 실패했습니다.' });
+      showNotice({ kind: 'error', text: error instanceof Error ? error.message : '방 삭제에 실패했습니다.' });
     } finally {
       setDeletingRoomId(null);
     }

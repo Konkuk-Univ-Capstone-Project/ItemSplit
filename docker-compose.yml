@@ -30,8 +30,10 @@ services:
       OCR_READ_TIMEOUT: ${OCR_READ_TIMEOUT:-15s}
       OCR_PER_RECEIPT_DAILY_LIMIT: ${OCR_PER_RECEIPT_DAILY_LIMIT:-15}
       OCR_PER_USER_DAILY_LIMIT: ${OCR_PER_USER_DAILY_LIMIT:-60}
+    # Loopback only: the API is reached through nginx (frontend). Published on all interfaces, anyone on the
+    # network could call it directly from a private address that Tomcat trusts for X-Forwarded-For.
     ports:
-      - "${APP_PORT:-8080}:8080"
+      - "127.0.0.1:${APP_PORT:-8080}:8080"
     volumes:
       - itemsplit-storage:/app/storage
 
@@ -53,8 +55,9 @@ services:
       POSTGRES_DB: ${DB_NAME:-itemsplit}
       POSTGRES_USER: ${DB_USER:-itemsplit}
       POSTGRES_PASSWORD: ${DB_PASSWORD:-itemsplit}
+    # Loopback only: for local tools and ./gradlew bootRun on the same machine.
     ports:
-      - "${DB_PORT:-5432}:5432"
+      - "127.0.0.1:${DB_PORT:-5432}:5432"
     volumes:
       - itemsplit-postgres-data:/var/lib/postgresql/data
     healthcheck:
