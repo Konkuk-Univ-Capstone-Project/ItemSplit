@@ -11,6 +11,17 @@ public interface RoomMemberRepository extends JpaRepository<RoomMember, Long> {
 
 	boolean existsByRoomIdAndUserId(Long roomId, Long userId);
 
+	// room_members is unique on (room_id, user_id), so this is one row per room.
+	@Query("""
+		select roomMember
+		from RoomMember roomMember
+		join fetch roomMember.room room
+		join fetch room.owner owner
+		where roomMember.user.id = :userId
+		order by room.id desc
+		""")
+	List<RoomMember> findAllByUserIdWithRoom(@Param("userId") Long userId);
+
 	Optional<RoomMember> findByRoomIdAndUserId(Long roomId, Long userId);
 
 	@Query("""

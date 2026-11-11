@@ -27,6 +27,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class RoomController {
 
 	private final RoomService roomService;
+	private final RoomListService roomListService;
 	private final RoomShareService roomShareService;
 
 	@PostMapping
@@ -44,6 +45,14 @@ public class RoomController {
 				result.ownerId(),
 				result.ownerNickname()
 			)));
+	}
+
+	@GetMapping
+	public ApiResponse<RoomListService.RoomListResult> getMyRooms(
+		@AuthenticationPrincipal AuthenticatedUser authenticatedUser
+	) {
+		Long userId = requireAuthenticatedUser(authenticatedUser);
+		return ApiResponse.success(roomListService.getMyRooms(userId));
 	}
 
 	@GetMapping("/{roomId}/members")

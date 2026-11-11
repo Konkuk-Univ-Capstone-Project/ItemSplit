@@ -21,7 +21,7 @@ public class Assignment {
     private Item item;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "room_member_id")
+    @JoinColumn(name = "room_member_id", nullable = false)
     private RoomMember roomMember;
 
     private Assignment(Item item, RoomMember roomMember) {

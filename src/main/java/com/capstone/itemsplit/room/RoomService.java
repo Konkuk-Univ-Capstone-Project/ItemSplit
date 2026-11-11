@@ -175,12 +175,16 @@ public class RoomService {
 
 	@Transactional
 	public JoinRoomResult joinRoom(String token, Long userId, Long memberId, String displayName) {
-        Long roomId = resolveRoomByInviteToken(token).getId();
-        Room room = roomRepository.findByIdForUpdate(roomId)
-            .orElseThrow(() -> new ApiException(ErrorCode.NOT_FOUND));
-        // Revalidate after waiting for the same lock used by invite reissue.
-        if (!roomInviteTokenRepository.findValidRoomId(token, LocalDateTime.now()).filter(roomId::equals).isPresent())
-            throw new ApiException(ErrorCode.VALIDATION_ERROR, "Invite token is invalid or expired.");
+		// The requester may not be a member yet, so lock the room by its token instead of checkMemberForUpdate.
+		// Every check below runs after the lock, so two accounts cannot claim the same manual member.
+		Long roomId = roomInviteTokenRepository.findRoomIdByToken(token)
+			.orElseThrow(() -> new ApiException(ErrorCode.VALIDATION_ERROR, "Invite token is invalid or expired."));
+		roomRepository.findByIdForUpdate(roomId)
+			.orElseThrow(() -> new ApiException(ErrorCode.VALIDATION_ERROR, "Invite token is invalid or expired."));
+		Room room = resolveRoomByInviteToken(token);
+		if (!room.getId().equals(roomId)) {
+			throw new ApiException(ErrorCode.VALIDATION_ERROR, "Invite token is invalid or expired.");
+		}
 		User user = userService.getById(userId);
 
 		boolean alreadyMember = roomMemberRepository.existsByRoomIdAndUserId(room.getId(), userId);

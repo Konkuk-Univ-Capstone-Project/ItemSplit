@@ -57,6 +57,10 @@ import type {
   Settlement,
   SharedSettlement
 } from './types';
+import { RoomList } from './features/rooms/RoomList';
+import { chooseRoomId, clearLegacyRoomStorage, readLastRoomId, saveLastRoomId } from './features/rooms/selection';
+import type { RoomListItem } from './features/rooms/types';
+import { useMyRooms } from './features/rooms/useMyRooms';
 
 import {
   blankDraftItem,
@@ -70,8 +74,6 @@ import {
 } from './receiptDraft';
 
 const AUTH_KEY = 'itemsplit.auth';
-const ROOMS_KEY = 'itemsplit.rooms';
-const ACTIVE_ROOM_KEY = 'itemsplit.activeRoomId';
 
 type MainTab = 'receipts' | 'settlement' | 'share';
 type AuthMode = 'login' | 'signup' | 'shared';
@@ -173,16 +175,23 @@ function App() {
 
 function PrivateApp() {
   const [auth, setAuth] = useState<AuthSession | null>(() => readJson<AuthSession | null>(AUTH_KEY, null));
-  const [recentRooms, setRecentRooms] = useState<RecentRoom[]>(() => readJson<RecentRoom[]>(ROOMS_KEY, []));
-  const [activeRoomId, setActiveRoomId] = useState<number | null>(() => {
-    const value = localStorage.getItem(ACTIVE_ROOM_KEY);
-    return value ? Number(value) : null;
-  });
+  const myRooms = useMyRooms(auth?.accessToken ?? null, auth?.userId ?? null);
+  // The selection is stored with its account so a previous account's choice is never applied to the next one.
+  const [selection, setSelection] = useState<{ userId: number; roomId: number | null } | null>(null);
+  const userId = auth?.userId ?? null;
+  const activeRoomId = selection && selection.userId === userId ? selection.roomId : null;
+  // Callbacks from a request started before logout still carry the old account's userId; they are ignored.
+  const currentUserId = useRef(userId);
+  currentUserId.current = userId;
   const [activeTab, setActiveTab] = useState<MainTab>('receipts');
   const [notice, setNotice] = useState<Notice>(null);
   const [roomRefreshVersion, setRoomRefreshVersion] = useState(0);
   const [roomEditStatus, setRoomEditStatus] = useState<{key: string; blocked: boolean} | null>(null);
   const activeRoomKey = `${auth?.accessToken}:${activeRoomId}`;
+
+  useEffect(() => {
+    clearLegacyRoomStorage(localStorage);
+  }, []);
 
   useEffect(() => {
     if (auth) {
@@ -192,49 +201,52 @@ function PrivateApp() {
     }
   }, [auth]);
 
+  // After each successful load keep the current (or last saved) room if the server still lists it.
   useEffect(() => {
-    localStorage.setItem(ROOMS_KEY, JSON.stringify(recentRooms));
-  }, [recentRooms]);
+    if (userId === null || !myRooms.ready) return;
+    setSelection((current) => {
+      const preferred = current && current.userId === userId ? current.roomId : readLastRoomId(localStorage, userId);
+      return { userId, roomId: chooseRoomId(myRooms.rooms, preferred) };
+    });
+  }, [userId, myRooms.ready, myRooms.rooms]);
 
   useEffect(() => {
-    if (activeRoomId) {
-      localStorage.setItem(ACTIVE_ROOM_KEY, String(activeRoomId));
-    } else {
-      localStorage.removeItem(ACTIVE_ROOM_KEY);
+    if (selection && selection.userId === userId && myRooms.ready) {
+      saveLastRoomId(localStorage, selection.userId, selection.roomId);
     }
-  }, [activeRoomId]);
+  }, [selection, userId, myRooms.ready]);
 
   const activeRoom = useMemo(
-    () => recentRooms.find((room) => room.roomId === activeRoomId) ?? null,
-    [activeRoomId, recentRooms]
+    () => myRooms.rooms.find((room) => room.roomId === activeRoomId) ?? null,
+    [activeRoomId, myRooms.rooms]
   );
 
+  function setActiveRoomId(roomId: number | null) {
+    if (userId === null || userId !== currentUserId.current) return;
+    setSelection({ userId, roomId });
+  }
+
   function saveRoom(room: RecentRoom) {
-    setRecentRooms((current) => {
-      const next = [room, ...current.filter((item) => item.roomId !== room.roomId)];
-      return next.slice(0, 8);
-    });
     setActiveRoomId(room.roomId);
     setRoomRefreshVersion((version) => version + 1);
+    void myRooms.reload();
   }
 
   function removeRoom(roomId: number) {
-    setRecentRooms((current) => {
-      const next = current.filter((room) => room.roomId !== roomId);
-      if (activeRoomId === roomId) {
-        setActiveRoomId(next[0]?.roomId ?? null);
-      }
-      return next;
-    });
+    if (activeRoomId === roomId) setActiveRoomId(null);
+    void myRooms.reload();
   }
 
   function updateRoomOwnership(roomId: number, owner: boolean) {
-    setRecentRooms((current) => current.map((room) => (room.roomId === roomId ? { ...room, owner } : room)));
+    // Ownership comes from the server list; reload only if the room screen saw something different.
+    if (myRooms.rooms.some((room) => room.roomId === roomId && room.owner !== owner)) {
+      void myRooms.reload();
+    }
   }
 
   function handleLogout() {
     setAuth(null);
-    setActiveRoomId(null);
+    setSelection(null);
     setNotice({ kind: 'info', text: '로그아웃되었습니다.' });
   }
 
@@ -265,7 +277,10 @@ function PrivateApp() {
           activeRoomReadOnly={roomEditStatus?.key !== activeRoomKey || roomEditStatus.blocked}
           onSettlementConflict={() => setRoomRefreshVersion(version => version + 1)}
           token={auth.accessToken}
-          rooms={recentRooms}
+          rooms={myRooms.rooms}
+          roomsLoading={myRooms.loading}
+          roomsError={myRooms.error}
+          reloadRooms={myRooms.reload}
           activeRoomId={activeRoomId}
           saveRoom={saveRoom}
           removeRoom={removeRoom}
@@ -496,6 +511,9 @@ function RoomRail({
   onSettlementConflict,
   token,
   rooms,
+  roomsLoading,
+  roomsError,
+  reloadRooms,
   activeRoomId,
   saveRoom: publishRoom,
   removeRoom: publishRemoval,
@@ -505,7 +523,10 @@ function RoomRail({
   activeRoomReadOnly: boolean;
   onSettlementConflict: () => void;
   token: string;
-  rooms: RecentRoom[];
+  rooms: RoomListItem[];
+  roomsLoading: boolean;
+  roomsError: string | null;
+  reloadRooms: () => Promise<void>;
   activeRoomId: number | null;
   saveRoom: (room: RecentRoom) => void;
   removeRoom: (roomId: number) => void;
@@ -532,6 +553,7 @@ function RoomRail({
     setNotice(null);
     try {
       const room = await createRoom(token, roomName);
+      if (!alive.current) return;
       saveRoom({ roomId: room.roomId, roomName: room.roomName, owner: true });
       setRoomName('');
       setNotice({ kind: 'success', text: `${room.roomName} 방을 만들었습니다.` });
@@ -548,6 +570,7 @@ function RoomRail({
     setNotice(null);
     try {
       const result = await getJoinOptions(token, inviteToken.trim());
+      if (!alive.current) return;
       setJoinOptions(result);
       const firstUnlinked = result.members.find((member) => !member.linked);
       setSelectedJoinMemberId(firstUnlinked ? String(firstUnlinked.memberId) : '');
@@ -576,6 +599,7 @@ function RoomRail({
         selectedJoinMemberId ? Number(selectedJoinMemberId) : null,
         joinNickname || null
       );
+      if (!alive.current) return;
       saveRoom({ roomId: room.roomId, roomName: room.roomName, owner: false });
       setInviteToken('');
       setJoinOptions(null);
@@ -590,7 +614,7 @@ function RoomRail({
     }
   }
 
-  async function handleDeleteRoom(room: RecentRoom) {
+  async function handleDeleteRoom(room: RoomListItem) {
     if (room.roomId === activeRoomId && activeRoomReadOnly) return;
     if (!window.confirm(`${room.roomName} 방을 삭제할까요?\n영수증, 품목, 정산, 멤버 정보가 함께 삭제됩니다.`)) {
       return;
@@ -600,6 +624,7 @@ function RoomRail({
     setNotice(null);
     try {
       await deleteRoom(token, room.roomId);
+      if (!alive.current) return;
       removeRoom(room.roomId);
       setNotice({ kind: 'success', text: `${room.roomName} 방을 삭제했습니다.` });
     } catch (error) {
@@ -734,31 +759,17 @@ function RoomRail({
         </div>
       )}
 
-      <div className="room-list">
-        {rooms.map((room) => (
-          <div className="room-row" key={room.roomId}>
-            <button
-              className={`room-button ${activeRoomId === room.roomId ? 'active' : ''}`}
-              type="button"
-              onClick={() => setActiveRoomId(room.roomId)}
-            >
-              <span>{room.roomName}</span>
-              <small>#{room.roomId}</small>
-            </button>
-            {room.owner && (
-              <button
-                className="icon-action danger room-delete-button"
-                type="button"
-                title="방 삭제"
-                disabled={deletingRoomId !== null || (room.roomId === activeRoomId && activeRoomReadOnly)}
-                onClick={() => handleDeleteRoom(room)}
-              >
-                <Trash2 size={15} />
-              </button>
-            )}
-          </div>
-        ))}
-      </div>
+      <RoomList
+        rooms={rooms}
+        selectedRoomId={activeRoomId}
+        loading={roomsLoading}
+        error={roomsError}
+        onSelect={setActiveRoomId}
+        onRetry={() => void reloadRooms()}
+        onDelete={handleDeleteRoom}
+        deletingRoomId={deletingRoomId}
+        selectedRoomReadOnly={activeRoomReadOnly}
+      />
     </aside>
   );
 }

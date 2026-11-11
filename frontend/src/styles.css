@@ -501,6 +501,24 @@ select:focus {
   gap: 8px;
 }
 
+.room-list-status {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border: 1px dashed var(--hairline);
+  border-radius: var(--radius-xl);
+  background: var(--surface-soft);
+  color: var(--steel);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.room-list-status.error {
+  border-style: solid;
+  border-color: var(--critical);
+  color: var(--critical);
+}
+
 .room-row {
   display: flex;
   align-items: center;

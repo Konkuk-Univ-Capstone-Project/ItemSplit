@@ -9,6 +9,8 @@ import java.time.Instant;
 import java.util.Date;
 import javax.crypto.SecretKey;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.env.Environment;
+import org.springframework.core.env.Profiles;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -19,8 +21,12 @@ public class JwtTokenProvider {
 
 	public JwtTokenProvider(
 		@Value("${app.jwt.secret}") String secret,
-		@Value("${app.jwt.access-token-expiration}") long accessTokenExpiration
+		@Value("${app.jwt.access-token-expiration}") long accessTokenExpiration,
+		Environment environment
 	) {
+		if (environment.acceptsProfiles(Profiles.of("prod"))) {
+			JwtSecretPolicy.requireProductionSecret(secret);
+		}
 		this.signingKey = Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
 		this.accessTokenExpiration = accessTokenExpiration;
 	}
